@@ -1,36 +1,56 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# C Block Confessions
 
-## Getting Started
+Anonymous confession wall for C block, Galgotias University.
+Next.js 16 + Supabase + react-three-fiber + Framer Motion.
 
-First, run the development server:
+## How it works
+
+1. **Campus stage.** A 3D Galgotias campus renders in WebGL: main colonnaded
+   building, A/B blocks, and a glowing C Block down the walkway.
+2. **Swipe up** (or scroll, arrow-up, or the button) and the camera flies to the
+   C Block entrance.
+3. **The wall.** Confessions arrive as a swipeable card deck. Right swipe hearts
+   it, left swipe skips.
+4. **Confess.** Anyone can post without an account.
+5. **/admin.** Password-gated moderation plus the submission log.
+
+Low-end phones and `prefers-reduced-motion` visitors get a flat SVG campus
+instead of WebGL, decided once on mount.
+
+## Setup
+
+```bash
+npm install
+cp .env.example .env.local   # fill in the Supabase keys
+```
+
+Create a Supabase project, open **SQL Editor**, paste `supabase/schema.sql`,
+run it. Then:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Admin panel: <http://localhost:3000/admin>
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Using a real campus model
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Drop a `campus.glb` into `public/models/`. The scene detects it on load and
+renders it instead of the procedural campus. Nothing else to change.
 
-## Learn More
+## Deploy
 
-To learn more about Next.js, take a look at the following resources:
+Push to GitHub, import into Vercel, paste the same four environment variables.
+On Vercel the edge geo headers are used for location, so no external lookup is
+needed.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Data collected
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+`confessions` holds the public text. `confession_meta` holds the submission
+origin: IP, user agent, parsed device/OS/browser, screen and viewport, timezone,
+language, CPU/RAM, GPU string, a derived device fingerprint, and IP-derived
+city/region/country/coordinates. That table has **zero** RLS policies, so the
+public anon key cannot read it; only the server-side service-role key can.
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+This is personal data under India's DPDP Act 2023. Publish a privacy notice
+before the site goes public.
