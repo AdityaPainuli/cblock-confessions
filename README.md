@@ -12,11 +12,42 @@ Next.js 16 + Supabase + react-three-fiber + Framer Motion.
    trabeated sandstone entrance gate.
 2. **Swipe up** (or scroll, arrow-up, or the button) and the camera flies to the
    C Block entrance.
-3. **The wall.** Confessions arrive as a swipeable card deck. Right swipe hearts
-   it, left swipe skips.
+3. **The wall.** Confessions arrive as a swipeable card deck. Right swipe
+   hearts it, left swipe skips, the flag reports it. Sort by latest or top,
+   filter by tag, and the next page loads before you reach the end.
 4. **Confess.** Two steps: say which block you study in (and your course, if we
    have mapped that block yet), then write. No account needed.
 5. **/admin.** Password-gated moderation plus the submission log.
+
+## Performance
+
+Everything is budgeted around a mid-range Android on campus wifi, because that
+is what this actually gets read on.
+
+`src/lib/useDeviceTier.ts` measures the device once per load and picks a tier:
+
+| Tier | Who gets it | What renders |
+|---|---|---|
+| `high` | desktop GPU | full scene, shadows, all props |
+| `medium` | capable phones | WebGL, no shadows, instanced props, dpr capped at 1.3 |
+| `low` | weak devices, Data Saver, 2g, reduced-motion | SVG campus, **no three.js at all** |
+
+The consequences of that:
+
+- **three.js is a lazy chunk, 246 KB gzipped, and is never in the initial
+  load.** Low-tier devices never request it.
+- **The canvas stops rendering when it is not being looked at** — once the
+  reader is in the feed, or the tab is hidden. The scene is almost fully veiled
+  behind the feed anyway, and a phone should not burn battery drawing it.
+- **Repeated props are instanced.** Palms, shrubs and pylons were dozens of draw
+  calls a frame; they are now three.
+- Lower tiers thin the props out rather than deleting them, so the campus keeps
+  its shape on a phone.
+
+Mobile handling: `dvh` units, `env(safe-area-inset-*)` padding for the notch and
+home indicator, 16px inputs so iOS does not zoom on focus, touch targets at 40px
+and up, `touch-action: pan-y` on the card so a swipe is never a page scroll, and
+no horizontal page overflow at any width.
 
 ## Blocks
 
@@ -68,6 +99,21 @@ renders it instead of the procedural campus. Nothing else to change.
 Push to GitHub, import into Vercel, paste the same four environment variables.
 On Vercel the edge geo headers are used for location, so no external lookup is
 needed.
+
+## Hearts and reports
+
+One heart and one report per device per confession. The device key is the same
+fingerprint hash the meta table stores: it identifies a browser profile, not a
+person, and is used only to stop one reader voting repeatedly. The browser also
+remembers its own votes in `localStorage` so the UI is honest before the round
+trip, but the server is the one that decides.
+
+At **3 reports** a confession flips to `pending` and leaves the wall until a
+moderator looks at it. That threshold is `REPORT_THRESHOLD` in `src/lib/data.ts`
+and the `cast_vote` function in the schema.
+
+Posting is rate limited on the address **and** the device together, so spoofing
+`X-Forwarded-For` does not hand the caller a fresh quota.
 
 ## Data collected
 

@@ -1,9 +1,59 @@
 "use client";
 
-import { useMemo, useRef } from "react";
+import { useLayoutEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { BRAND, CAMPUS } from "@/lib/palette";
+import type { Quality } from "@/lib/useDeviceTier";
+
+type Placement = { position: [number, number, number]; scale?: number; rotation?: number };
+
+/**
+ * Draws one geometry many times in a single call. The campus has dozens of
+ * palms, shrubs and pylons; as separate meshes that is dozens of draw calls a
+ * frame, which is exactly what a mid-range phone cannot spare.
+ */
+function Instanced({
+  placements,
+  color,
+  castShadow = false,
+  children,
+}: {
+  placements: Placement[];
+  color: string;
+  castShadow?: boolean;
+  children: React.ReactNode;
+}) {
+  const ref = useRef<THREE.InstancedMesh>(null);
+
+  useLayoutEffect(() => {
+    if (!ref.current) return;
+    const m = new THREE.Object3D();
+    placements.forEach((p, i) => {
+      m.position.set(...p.position);
+      m.rotation.set(0, p.rotation ?? 0, 0);
+      const s = p.scale ?? 1;
+      m.scale.set(s, s, s);
+      m.updateMatrix();
+      ref.current!.setMatrixAt(i, m.matrix);
+    });
+    ref.current.instanceMatrix.needsUpdate = true;
+    ref.current.computeBoundingSphere();
+  }, [placements]);
+
+  if (!placements.length) return null;
+
+  return (
+    <instancedMesh
+      ref={ref}
+      args={[undefined, undefined, placements.length]}
+      castShadow={castShadow}
+    >
+      {children}
+      <meshStandardMaterial color={color} roughness={1} />
+    </instancedMesh>
+  );
+}
 
 /**
  * Text baked into a canvas texture. Keeps the scene free of any runtime font
@@ -358,26 +408,6 @@ function MainBuilding({ position }: { position: [number, number, number] }) {
   );
 }
 
-/** Red sandstone pylon, the pair-wise markers lining the central axis. */
-function Pylon({ position }: { position: [number, number, number] }) {
-  return (
-    <group position={position}>
-      <mesh position={[0, 2.1, 0]} castShadow>
-        <boxGeometry args={[1.5, 4.2, 1.5]} />
-        <meshStandardMaterial color={CAMPUS.terracotta} roughness={0.95} />
-      </mesh>
-      <mesh position={[0, 2.6, 0]}>
-        <boxGeometry args={[0.75, 1.5, 1.6]} />
-        <meshStandardMaterial color={CAMPUS.terracottaDeep} roughness={1} />
-      </mesh>
-      <mesh position={[0, 4.35, 0]} castShadow>
-        <boxGeometry args={[1.9, 0.4, 1.9]} />
-        <meshStandardMaterial color={CAMPUS.sandShade} roughness={0.9} />
-      </mesh>
-    </group>
-  );
-}
-
 /** The trabeated sandstone entrance gate, with the name incised in the beam. */
 function Gate({ position }: { position: [number, number, number] }) {
   const piers = useMemo(() => [-13, -4.5, 4.5, 13], []);
@@ -408,37 +438,50 @@ function Gate({ position }: { position: [number, number, number] }) {
   );
 }
 
-function Palm({ position, scale = 1 }: { position: [number, number, number]; scale?: number }) {
-  const fronds = useMemo(() => Array.from({ length: 7 }, (_, i) => (i / 7) * Math.PI * 2), []);
-
+/**
+ * Palms and shrubs, drawn instanced. A palm is a trunk plus a crown; the crown
+ * is one cone rather than seven frond planes, which reads the same at the
+ * distance this camera ever sits at and costs a fraction of the geometry.
+ */
+function Planting({ palms, shrubs }: { palms: Placement[]; shrubs: Placement[] }) {
   return (
-    <group position={position} scale={scale}>
-      <mesh position={[0, 2.4, 0]} castShadow>
-        <cylinderGeometry args={[0.16, 0.28, 4.8, 7]} />
-        <meshStandardMaterial color={CAMPUS.trunk} roughness={1} />
-      </mesh>
-      {fronds.map((a, i) => (
-        <mesh
-          key={a}
-          position={[Math.sin(a) * 1.1, 4.9, Math.cos(a) * 1.1]}
-          rotation={[Math.cos(a) * 0.5, -a, -0.55 + Math.sin(a) * 0.25]}
-          castShadow
-        >
-          <boxGeometry args={[2.6, 0.12, 0.75]} />
-          <meshStandardMaterial color={i % 2 ? CAMPUS.foliage : "#4c7d42"} roughness={1} />
-        </mesh>
-      ))}
+    <group>
+      <Instanced placements={palms} color={CAMPUS.trunk}>
+        <cylinderGeometry args={[0.16, 0.28, 4.8, 6]} />
+      </Instanced>
+      <Instanced
+        placements={palms.map((p) => ({
+          ...p,
+          position: [p.position[0], p.position[1] + 5.2, p.position[2]],
+        }))}
+        color={CAMPUS.foliage}
+      >
+        <coneGeometry args={[2.3, 2.6, 7]} />
+      </Instanced>
+      <Instanced placements={shrubs} color={CAMPUS.foliage}>
+        <sphereGeometry args={[0.85, 8, 6]} />
+      </Instanced>
     </group>
   );
 }
 
-/** Clipped shrub, the topiary dotted through the lawns. */
-function Shrub({ position, scale = 1 }: { position: [number, number, number]; scale?: number }) {
+/** Red sandstone pylons lining the central axis, drawn instanced. */
+function Pylons({ placements }: { placements: Placement[] }) {
   return (
-    <mesh position={[position[0], 0.75 * scale, position[2]]} scale={scale} castShadow>
-      <sphereGeometry args={[0.85, 10, 8]} />
-      <meshStandardMaterial color={CAMPUS.foliage} roughness={1} />
-    </mesh>
+    <group>
+      <Instanced placements={placements} color={CAMPUS.terracotta}>
+        <boxGeometry args={[1.5, 4.2, 1.5]} />
+      </Instanced>
+      <Instanced
+        placements={placements.map((p) => ({
+          ...p,
+          position: [p.position[0], p.position[1] + 2.25, p.position[2]],
+        }))}
+        color={CAMPUS.sandShade}
+      >
+        <boxGeometry args={[1.9, 0.4, 1.9]} />
+      </Instanced>
+    </group>
   );
 }
 
@@ -467,40 +510,60 @@ function Fountain({ position }: { position: [number, number, number] }) {
   );
 }
 
-export default function Campus() {
-  const pylons = useMemo<[number, number, number][]>(() => {
-    const out: [number, number, number][] = [];
-    for (let z = 40; z >= 4; z -= 9) {
-      out.push([-9.5, 0, z], [9.5, 0, z]);
+export default function Campus({ quality }: { quality: Quality }) {
+  // Lower tiers thin out the repeated props rather than dropping them entirely,
+  // so the campus keeps its shape on a phone.
+  const step = useMemo(
+    () => (n: number) => (quality.props >= 1 ? n : Math.round(n / Math.max(quality.props, 0.34))),
+    [quality.props],
+  );
+  const thin = useMemo(
+    () =>
+      <T,>(arr: T[]): T[] =>
+        quality.props >= 1 ? arr : arr.filter((_, i) => i % Math.round(1 / quality.props) === 0),
+    [quality.props],
+  );
+
+  const pylons = useMemo<Placement[]>(() => {
+    const out: Placement[] = [];
+    for (let z = 40; z >= 4; z -= step(9)) {
+      out.push({ position: [-9.5, 2.1, z] }, { position: [9.5, 2.1, z] });
     }
     return out;
-  }, []);
+  }, [step]);
 
   const fountains = useMemo<[number, number, number][]>(
-    () => [8, 17, 26, 35].map((z) => [0, 0, z] as [number, number, number]),
-    [],
+    () =>
+      (quality.props >= 1 ? [8, 17, 26, 35] : quality.props > 0 ? [17, 31] : []).map(
+        (z) => [0, 0, z] as [number, number, number],
+      ),
+    [quality.props],
   );
 
-  const palms = useMemo<[number, number, number, number][]>(
-    () => [
-      [-16, 0, 44, 1], [16, 0, 44, 1.1], [-16, 0, 30, 0.9], [16, 0, 30, 1],
-      [-16, 0, 16, 1.05], [16, 0, 16, 0.95], [-34, 0, 34, 1.1], [34, 0, 36, 1],
-      [-24, 0, 46, 0.9], [26, 0, 46, 1.05],
-    ],
-    [],
-  );
+  const palms = useMemo<Placement[]>(() => {
+    const all: [number, number, number][] = [
+      [-16, 44, 1], [16, 44, 1.1], [-16, 30, 0.9], [16, 30, 1],
+      [-16, 16, 1.05], [16, 16, 0.95], [-34, 34, 1.1], [34, 36, 1],
+      [-24, 46, 0.9], [26, 46, 1.05],
+    ];
+    return thin(all).map(([x, z, sc]) => ({ position: [x, 2.4, z], scale: sc }));
+  }, [thin]);
 
-  const shrubs = useMemo<[number, number, number, number][]>(() => {
-    const out: [number, number, number, number][] = [];
-    for (let i = 0; i < 12; i++) {
-      const a = (i / 12) * Math.PI * 2;
-      out.push([Math.sin(a) * 6, 0, 50 + Math.cos(a) * 6, 0.9]);
+  const shrubs = useMemo<Placement[]>(() => {
+    const out: Placement[] = [];
+    const ring = quality.props >= 1 ? 12 : 6;
+    for (let i = 0; i < ring; i++) {
+      const a = (i / ring) * Math.PI * 2;
+      out.push({ position: [Math.sin(a) * 6, 0.8, 50 + Math.cos(a) * 6], scale: 0.9 });
     }
-    for (let z = 10; z <= 40; z += 6) {
-      out.push([-14, 0, z, 0.7], [14, 0, z, 0.7]);
+    for (let z = 10; z <= 40; z += step(6)) {
+      out.push(
+        { position: [-14, 0.6, z], scale: 0.7 },
+        { position: [14, 0.6, z], scale: 0.7 },
+      );
     }
     return out;
-  }, []);
+  }, [quality.props, step]);
 
   return (
     <group>
@@ -588,17 +651,10 @@ export default function Campus() {
         underConstruction
       />
 
-      {pylons.map((p, i) => (
-        <Pylon key={i} position={p} />
-      ))}
+      <Pylons placements={pylons} />
+      <Planting palms={palms} shrubs={shrubs} />
       {fountains.map((p, i) => (
         <Fountain key={i} position={p} />
-      ))}
-      {palms.map(([x, y, z, s], i) => (
-        <Palm key={i} position={[x, y, z]} scale={s} />
-      ))}
-      {shrubs.map(([x, y, z, s], i) => (
-        <Shrub key={i} position={[x, y, z]} scale={s} />
       ))}
     </group>
   );

@@ -16,11 +16,16 @@ create table if not exists public.confessions (
   status      text not null default 'approved'
               check (status in ('pending', 'approved', 'rejected')),
   hearts      integer not null default 0,
+  -- Reader reports. At REPORT_THRESHOLD the row hides itself pending review.
+  reports     integer not null default 0,
   created_at  timestamptz not null default now()
 );
 
 create index if not exists confessions_feed_idx
   on public.confessions (to_block, status, created_at desc);
+
+create index if not exists confessions_top_idx
+  on public.confessions (to_block, status, hearts desc, created_at desc);
 
 -- ---------------------------------------------------------------------------
 -- Submission metadata. Admin-only: no anon/authenticated policy is ever added,
@@ -68,10 +73,24 @@ create index if not exists confession_meta_fingerprint_idx
   on public.confession_meta (fingerprint);
 
 -- ---------------------------------------------------------------------------
+-- One heart and one report per device per confession. The device key is the
+-- fingerprint hash the client derives; it identifies a browser profile, not a
+-- person, and is only ever used to stop a single reader voting repeatedly.
+-- ---------------------------------------------------------------------------
+create table if not exists public.confession_votes (
+  confession_id uuid not null references public.confessions(id) on delete cascade,
+  device_key    text not null,
+  kind          text not null check (kind in ('heart', 'report')),
+  created_at    timestamptz not null default now(),
+  primary key (confession_id, device_key, kind)
+);
+
+-- ---------------------------------------------------------------------------
 -- Row level security
 -- ---------------------------------------------------------------------------
-alter table public.confessions    enable row level security;
+alter table public.confessions     enable row level security;
 alter table public.confession_meta enable row level security;
+alter table public.confession_votes enable row level security;
 
 drop policy if exists "approved confessions are public" on public.confessions;
 create policy "approved confessions are public"
@@ -79,22 +98,49 @@ create policy "approved confessions are public"
   to anon, authenticated
   using (status = 'approved');
 
--- confession_meta intentionally has zero policies.
--- Only the service-role key (server side) can read or write it.
+-- confession_meta and confession_votes intentionally have zero policies.
+-- Only the service-role key (server side) can read or write them.
 
 -- ---------------------------------------------------------------------------
 -- Heart counter. Called from the server with the service-role key.
 -- ---------------------------------------------------------------------------
-create or replace function public.increment_hearts(cid uuid)
+-- Records the vote and bumps the counter in one statement, so a device that
+-- votes twice is a no-op rather than a double count.
+create or replace function public.cast_vote(cid uuid, device text, vote text)
 returns integer
-language sql
+language plpgsql
 security definer
 set search_path = public
 as $$
-  update public.confessions
-     set hearts = hearts + 1
-   where id = cid and status = 'approved'
-  returning hearts;
+declare
+  fresh boolean;
+  total integer;
+begin
+  insert into public.confession_votes (confession_id, device_key, kind)
+  values (cid, device, vote)
+  on conflict do nothing;
+
+  get diagnostics fresh = row_count;
+
+  if vote = 'heart' then
+    if fresh then
+      update public.confessions set hearts = hearts + 1
+       where id = cid and status = 'approved';
+    end if;
+    select hearts into total from public.confessions where id = cid;
+  else
+    if fresh then
+      update public.confessions
+         set reports = reports + 1,
+             -- Enough reports and it leaves the wall until a human looks.
+             status = case when reports + 1 >= 3 then 'pending' else status end
+       where id = cid;
+    end if;
+    select reports into total from public.confessions where id = cid;
+  end if;
+
+  return coalesce(total, 0);
+end;
 $$;
 
-revoke all on function public.increment_hearts(uuid) from public, anon, authenticated;
+revoke all on function public.cast_vote(uuid, text, text) from public, anon, authenticated;

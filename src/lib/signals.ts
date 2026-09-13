@@ -28,8 +28,11 @@ function hash(input: string): string {
   return (h >>> 0).toString(16).padStart(8, "0");
 }
 
+let cached: ClientSignals | null = null;
+
 export function collectSignals(): ClientSignals {
   if (typeof window === "undefined") return {};
+  if (cached) return cached;
 
   const nav = navigator as Navigator & {
     deviceMemory?: number;
@@ -52,5 +55,6 @@ export function collectSignals(): ClientSignals {
   s.fingerprint = hash(
     [s.screen, s.timezone, s.languages, s.platform, s.cpuCores, s.gpu].join("|"),
   );
+  cached = s;
   return s;
 }

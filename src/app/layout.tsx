@@ -14,7 +14,9 @@ export const viewport: Viewport = {
   themeColor: "#f4ece0",
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
+  // Lets the page paint under the notch and home indicator; the layout pads
+  // itself back out with env(safe-area-inset-*).
+  viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

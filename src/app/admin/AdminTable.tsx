@@ -9,6 +9,7 @@ export type AdminRow = {
   tag: string;
   mood: string;
   to_block?: string;
+  reports?: number;
   status: string;
   hearts: number;
   created_at: string;
@@ -128,6 +129,11 @@ export default function AdminTable({ rows, demo }: { rows: AdminRow[]; demo?: bo
                     <span>#{r.tag}</span>
                     <span>{r.mood}</span>
                     <span>{"♥"} {r.hearts}</span>
+                    {!!r.reports && (
+                      <span className="rounded bg-maroon/12 px-2 py-0.5 font-medium text-maroon">
+                        {"⚑"} {r.reports} reported
+                      </span>
+                    )}
                     <span>{new Date(r.created_at).toLocaleString()}</span>
                   </p>
                 </div>

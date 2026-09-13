@@ -1,30 +1,36 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
-import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { useGLTF } from "@react-three/drei";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Canvas, useFrame, useLoader, useThree } from "@react-three/fiber";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import * as THREE from "three";
 import Campus from "./Campus";
+import { QUALITY, type Tier } from "@/lib/useDeviceTier";
 
 export type Stage = "campus" | "block";
 
 const VIEWS: Record<Stage, { pos: THREE.Vector3; look: THREE.Vector3 }> = {
-  // Looking straight down the axial plaza, through the gate.
   campus: { pos: new THREE.Vector3(16, 30, 92), look: new THREE.Vector3(2, 9, 6) },
-  // Standing at the C Block entrance.
   block: { pos: new THREE.Vector3(19, 8, 63), look: new THREE.Vector3(26, 7, 34) },
 };
 
-function CameraRig({ stage }: { stage: Stage }) {
-  const { camera } = useThree();
+// Phones are portrait, so the campus needs to be further away to fit the frame.
+const PORTRAIT_PULLBACK = 1.42;
+
+function CameraRig({ stage, active }: { stage: Stage; active: boolean }) {
+  const { camera, size } = useThree();
   const look = useMemo(() => VIEWS.campus.look.clone(), []);
+  const settled = useRef(false);
 
   useFrame((state, delta) => {
     const view = VIEWS[stage];
     const t = 1 - Math.pow(0.0015, delta); // frame-rate independent damping
+    const portrait = size.height > size.width;
 
     const target = view.pos.clone();
-    if (stage === "campus") {
+    if (portrait) target.multiplyScalar(PORTRAIT_PULLBACK).setY(view.pos.y * 1.12);
+
+    if (stage === "campus" && active) {
       // Slow drift, so the overview never looks like a still render.
       const a = state.clock.elapsedTime * 0.06;
       target.x += Math.sin(a) * 13;
@@ -35,9 +41,28 @@ function CameraRig({ stage }: { stage: Stage }) {
     camera.position.lerp(target, t);
     look.lerp(view.look, t);
     camera.lookAt(look);
+    settled.current = camera.position.distanceToSquared(target) < 0.01;
   });
 
   return null;
+}
+
+/** Uses a real campus model when one is dropped at /public/models/campus.glb. */
+function GltfCampus({ url }: { url: string }) {
+  const gltf = useLoader(GLTFLoader, url);
+  return <primitive object={gltf.scene} />;
+}
+
+function useCustomModel() {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    const ac = new AbortController();
+    fetch("/models/campus.glb", { method: "HEAD", signal: ac.signal })
+      .then((r) => r.ok && setUrl("/models/campus.glb"))
+      .catch(() => {});
+    return () => ac.abort();
+  }, []);
+  return url;
 }
 
 /** Warm dusk gradient, painted into a canvas rather than pulled from a CDN. */
@@ -57,43 +82,41 @@ function Sky() {
     return new THREE.CanvasTexture(canvas);
   }, []);
 
+  useEffect(() => () => texture.dispose(), [texture]);
+
   return (
-    <mesh scale={[-1, 1, 1]}>
-      <sphereGeometry args={[300, 32, 24]} />
+    <mesh scale={[-1, 1, 1]} renderOrder={-1}>
+      <sphereGeometry args={[300, 24, 16]} />
       <meshBasicMaterial map={texture} side={THREE.BackSide} depthWrite={false} toneMapped={false} />
     </mesh>
   );
 }
 
-/** Uses a real campus model when one is dropped at /public/models/campus.glb. */
-function GltfCampus({ url }: { url: string }) {
-  const { scene } = useGLTF(url);
-  return <primitive object={scene} />;
-}
-
-function useCustomModel() {
-  const [url, setUrl] = useState<string | null>(null);
-  useEffect(() => {
-    let alive = true;
-    fetch("/models/campus.glb", { method: "HEAD" })
-      .then((r) => alive && r.ok && setUrl("/models/campus.glb"))
-      .catch(() => {});
-    return () => {
-      alive = false;
-    };
-  }, []);
-  return url;
-}
-
-export default function CampusScene({ stage }: { stage: Stage }) {
+export default function CampusScene({ stage, tier }: { stage: Stage; tier: Tier }) {
   const model = useCustomModel();
+  const q = QUALITY[tier];
+
+  /**
+   * The canvas keeps rendering while it is on screen and stops the moment it is
+   * not: once the reader is in the feed the scene is almost fully veiled, and a
+   * phone should not be spending its battery drawing a campus nobody can see.
+   */
+  const [visible, setVisible] = useState(true);
+  useEffect(() => {
+    const onVis = () => setVisible(!document.hidden);
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, []);
+
+  const active = visible && stage === "campus";
 
   return (
     <Canvas
-      shadows
-      dpr={[1, 1.6]}
-      gl={{ antialias: true, powerPreference: "high-performance" }}
-      camera={{ position: [16, 30, 92], fov: 48, near: 0.5, far: 700 }}
+      shadows={q.shadows}
+      dpr={q.dpr}
+      frameloop={active ? "always" : "demand"}
+      gl={{ antialias: q.antialias, powerPreference: "high-performance" }}
+      camera={{ position: [16, 30, 92], fov: 48, near: 1, far: 520 }}
     >
       <fog attach="fog" args={["#e8d4b6", 200, 470]} />
 
@@ -103,8 +126,8 @@ export default function CampusScene({ stage }: { stage: Stage }) {
         position={[-70, 52, 70]}
         intensity={2.5}
         color="#ffd9a3"
-        castShadow
-        shadow-mapSize={[2048, 2048]}
+        castShadow={q.shadows}
+        shadow-mapSize={[q.shadowMap, q.shadowMap]}
         shadow-camera-left={-110}
         shadow-camera-right={110}
         shadow-camera-top={110}
@@ -115,9 +138,29 @@ export default function CampusScene({ stage }: { stage: Stage }) {
 
       <Sky />
 
-      <Suspense fallback={null}>{model ? <GltfCampus url={model} /> : <Campus />}</Suspense>
+      <Suspense fallback={null}>
+        {model ? <GltfCampus url={model} /> : <Campus quality={q} />}
+      </Suspense>
 
-      <CameraRig stage={stage} />
+      <CameraRig stage={stage} active={active} />
+      {/* One last frame after the camera settles, so "demand" leaves it correct. */}
+      <Settle stage={stage} />
     </Canvas>
   );
+}
+
+/** Drives a few frames after a stage change so the paused canvas lands settled. */
+function Settle({ stage }: { stage: Stage }) {
+  const { invalidate } = useThree();
+  useEffect(() => {
+    let raf = 0;
+    const until = performance.now() + 1800;
+    const tick = () => {
+      invalidate();
+      if (performance.now() < until) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [stage, invalidate]);
+  return null;
 }

@@ -6,8 +6,17 @@ import type { Confession, Mood, Origin } from "./types";
 export type MetaRow = Record<string, unknown> & { confession_id: string };
 export type AdminConfession = Confession & {
   status: string;
+  reports: number;
   meta?: Record<string, unknown> | null;
 };
+
+export type Sort = "latest" | "top";
+export type Page = { items: Confession[]; nextCursor: string | null };
+
+/** How many reports it takes for a confession to leave the wall for review. */
+export const REPORT_THRESHOLD = 3;
+
+const PAGE_SIZE = 20;
 
 /**
  * Without Supabase credentials the site runs on an in-memory store seeded with
@@ -29,6 +38,7 @@ const SEED: Omit<AdminConfession, "meta">[] = [
     id: randomUUID(),
     body: "I have been sitting in the wrong section for three weeks and the professor still marks me present. At this point it is my section.",
     tag: "attendance",
+    reports: 0,
     mood: "cringe",
     to_block: "C",
     status: "approved",
@@ -39,6 +49,7 @@ const SEED: Omit<AdminConfession, "meta">[] = [
     id: randomUUID(),
     body: "Whoever plays guitar on the C block stairs at 6pm, I plan my whole evening around walking past. That is all.",
     tag: "crush",
+    reports: 0,
     mood: "crush",
     to_block: "C",
     status: "approved",
@@ -49,6 +60,7 @@ const SEED: Omit<AdminConfession, "meta">[] = [
     id: randomUUID(),
     body: "I told my group I finished my part of the project. I have not opened the file. The presentation is tomorrow. Pray for me.",
     tag: "exams",
+    reports: 0,
     mood: "guilt",
     to_block: "C",
     status: "approved",
@@ -59,6 +71,7 @@ const SEED: Omit<AdminConfession, "meta">[] = [
     id: randomUUID(),
     body: "The canteen samosa went from 15 to 25 rupees and nobody is protesting. This is the real crisis on campus.",
     tag: "canteen",
+    reports: 0,
     mood: "rage",
     to_block: "C",
     status: "approved",
@@ -70,6 +83,8 @@ const SEED: Omit<AdminConfession, "meta">[] = [
 type MemoryStore = {
   confessions: AdminConfession[];
   meta: Map<string, Record<string, unknown>>;
+  /** `${confessionId}:${deviceKey}:${kind}` for one-vote-per-device. */
+  votes: Set<string>;
 };
 
 /**
@@ -84,21 +99,29 @@ const globalStore = globalThis as typeof globalThis & {
 const memory: MemoryStore = (globalStore.__cbcMemory ??= {
   confessions: [...SEED],
   meta: new Map(),
+  votes: new Set(),
 });
 
 export async function listPublic(
   tag?: string | null,
   toBlock: string = "C",
-): Promise<Confession[]> {
+  sort: Sort = "latest",
+  cursor?: string | null,
+): Promise<Page> {
+  const order = (a: Confession, b: Confession) =>
+    sort === "top"
+      ? b.hearts - a.hearts || b.created_at.localeCompare(a.created_at)
+      : b.created_at.localeCompare(a.created_at);
+
   if (!hasSupabase()) {
-    return memory.confessions
+    const all = memory.confessions
       .filter(
         (c) =>
           c.status === "approved" &&
           c.to_block === toBlock &&
           (!tag || tag === "all" || c.tag === tag),
       )
-      .sort((a, b) => b.created_at.localeCompare(a.created_at))
+      .sort(order)
       .map((c) => ({
         id: c.id,
         body: c.body,
@@ -108,21 +131,36 @@ export async function listPublic(
         hearts: c.hearts,
         created_at: c.created_at,
       }));
+
+    const start = cursor ? Number(cursor) || 0 : 0;
+    const items = all.slice(start, start + PAGE_SIZE);
+    const next = start + PAGE_SIZE;
+    return { items, nextCursor: next < all.length ? String(next) : null };
   }
 
+  const from = cursor ? Number(cursor) || 0 : 0;
   let query = createAdminClient()
     .from("confessions")
     .select("id, body, tag, mood, to_block, hearts, created_at")
     .eq("status", "approved")
     .eq("to_block", toBlock)
-    .order("created_at", { ascending: false })
-    .limit(60);
+    .range(from, from + PAGE_SIZE - 1);
+
+  query =
+    sort === "top"
+      ? query.order("hearts", { ascending: false }).order("created_at", { ascending: false })
+      : query.order("created_at", { ascending: false });
 
   if (tag && tag !== "all") query = query.eq("tag", tag);
 
   const { data, error } = await query;
   if (error) throw new Error(error.message);
-  return (data ?? []) as Confession[];
+
+  const items = (data ?? []) as Confession[];
+  return {
+    items,
+    nextCursor: items.length === PAGE_SIZE ? String(from + PAGE_SIZE) : null,
+  };
 }
 
 export async function create(
@@ -145,6 +183,7 @@ export async function create(
       ...input,
       status: "approved",
       hearts: 0,
+      reports: 0,
       created_at: new Date().toISOString(),
     });
     memory.meta.set(id, fullMeta);
@@ -164,15 +203,39 @@ export async function create(
   return data.id;
 }
 
-export async function heart(id: string): Promise<number | null> {
+/**
+ * Records a heart or a report from one device. Voting twice from the same
+ * browser is a no-op, so the counts mean something. Returns the new total, or
+ * null if the confession has gone.
+ */
+export async function castVote(
+  id: string,
+  deviceKey: string,
+  kind: "heart" | "report",
+): Promise<number | null> {
   if (!hasSupabase()) {
     const c = memory.confessions.find((x) => x.id === id);
     if (!c) return null;
-    c.hearts += 1;
-    return c.hearts;
+
+    const key = `${id}:${deviceKey}:${kind}`;
+    if (memory.votes.has(key)) return kind === "heart" ? c.hearts : c.reports;
+    memory.votes.add(key);
+
+    if (kind === "heart") {
+      c.hearts += 1;
+      return c.hearts;
+    }
+
+    c.reports += 1;
+    if (c.reports >= REPORT_THRESHOLD) c.status = "pending";
+    return c.reports;
   }
 
-  const { data, error } = await createAdminClient().rpc("increment_hearts", { cid: id });
+  const { data, error } = await createAdminClient().rpc("cast_vote", {
+    cid: id,
+    device: deviceKey,
+    vote: kind,
+  });
   if (error) throw new Error(error.message);
   return data as number;
 }

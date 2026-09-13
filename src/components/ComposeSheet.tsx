@@ -146,7 +146,7 @@ export default function ComposeSheet({
                         <button
                           key={c}
                           onClick={() => setFromCourse(fromCourse === c ? null : c)}
-                          className={`rounded-full px-3.5 py-1.5 text-sm transition ${
+                          className={`min-h-10 rounded-full px-3.5 text-sm transition active:scale-95 ${
                             fromCourse === c
                               ? "bg-maroon text-[#fff4e6]"
                               : "border border-line text-muted hover:text-foreground"
@@ -180,14 +180,14 @@ export default function ComposeSheet({
                 <div className="mt-6 flex gap-3">
                   <button
                     onClick={close}
-                    className="flex-1 rounded-full border border-line py-3 text-muted transition hover:text-foreground"
+                    className="min-h-12 flex-1 rounded-full border border-line text-muted transition active:scale-95"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={() => setStep("write")}
                     disabled={!fromBlock}
-                    className="flex-[2] rounded-full bg-maroon py-3 font-medium text-[#fff4e6] shadow-[0_12px_34px_-14px_rgba(139,26,43,0.9)] transition hover:brightness-110 disabled:opacity-40"
+                    className="min-h-12 flex-[2] rounded-full bg-maroon font-medium text-[#fff4e6] shadow-[0_12px_34px_-14px_rgba(139,26,43,0.9)] transition active:scale-95 disabled:opacity-40"
                   >
                     Continue
                   </button>
@@ -197,7 +197,7 @@ export default function ComposeSheet({
               <>
                 <button
                   onClick={() => setStep("who")}
-                  className="text-sm text-muted transition hover:text-foreground"
+                  className="min-h-10 text-sm text-muted transition"
                 >
                   {"←"} {BLOCKS.find((b) => b.id === fromBlock)?.label}
                   {fromCourse ? ` · ${fromCourse}` : ""}
@@ -227,7 +227,7 @@ export default function ComposeSheet({
                     <button
                       key={m.id}
                       onClick={() => setMood(m.id)}
-                      className="rounded-full border px-3 py-1.5 text-sm transition"
+                      className="min-h-10 rounded-full border px-3.5 text-sm transition active:scale-95"
                       style={{
                         borderColor: mood === m.id ? m.accent : "rgba(93,64,40,0.18)",
                         color: mood === m.id ? m.accent : "#6d6051",
@@ -244,7 +244,7 @@ export default function ComposeSheet({
                     <button
                       key={t}
                       onClick={() => setTag(t)}
-                      className={`rounded-full px-3 py-1.5 text-sm transition ${
+                      className={`min-h-10 rounded-full px-3.5 text-sm transition active:scale-95 ${
                         tag === t
                           ? "bg-maroon text-[#fff4e6]"
                           : "border border-line text-muted hover:text-foreground"
@@ -260,14 +260,14 @@ export default function ComposeSheet({
                 <div className="mt-6 flex gap-3">
                   <button
                     onClick={close}
-                    className="flex-1 rounded-full border border-line py-3 text-muted transition hover:text-foreground"
+                    className="min-h-12 flex-1 rounded-full border border-line text-muted transition active:scale-95"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={submit}
                     disabled={sending}
-                    className="flex-[2] rounded-full bg-maroon py-3 font-medium text-[#fff4e6] shadow-[0_12px_34px_-14px_rgba(139,26,43,0.9)] transition hover:brightness-110 disabled:opacity-50"
+                    className="min-h-12 flex-[2] rounded-full bg-maroon font-medium text-[#fff4e6] shadow-[0_12px_34px_-14px_rgba(139,26,43,0.9)] transition active:scale-95 disabled:opacity-50"
                   >
                     {sending ? "Posting..." : "Post anonymously"}
                   </button>

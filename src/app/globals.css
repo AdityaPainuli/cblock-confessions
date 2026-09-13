@@ -33,6 +33,23 @@ body {
   color: var(--foreground);
   font-family: var(--font-geist-sans), system-ui, sans-serif;
   overscroll-behavior: none;
+  /* Stops the whole page rubber-banding while a card is being swiped. */
+  overflow: hidden;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* Swiping a card should never double as a text selection or a link drag. */
+button,
+canvas {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  user-select: none;
+}
+
+/* iOS zooms the page when a font smaller than 16px takes focus. */
+textarea,
+input {
+  font-size: 16px;
 }
 
 .no-scrollbar::-webkit-scrollbar {

@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import { z } from "zod";
 import { buildMeta, clientIp, geoLookup } from "@/lib/device";
 import { create, listPublic } from "@/lib/data";
-import { allow } from "@/lib/ratelimit";
+import { allowAll } from "@/lib/ratelimit";
 import { TAGS } from "@/lib/types";
 import { ALL_COURSES, BLOCK_IDS, getBlock } from "@/lib/blocks";
 
@@ -27,9 +27,12 @@ export async function GET(req: Request) {
   try {
     const toBlock = params.get("block") ?? "C";
     if (!getBlock(toBlock)?.receiving) {
-      return NextResponse.json({ confessions: [] });
+      return NextResponse.json({ confessions: [], nextCursor: null });
     }
-    return NextResponse.json({ confessions: await listPublic(params.get("tag"), toBlock) });
+
+    const sort = params.get("sort") === "top" ? "top" : "latest";
+    const page = await listPublic(params.get("tag"), toBlock, sort, params.get("cursor"));
+    return NextResponse.json({ confessions: page.items, nextCursor: page.nextCursor });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });
   }
@@ -39,18 +42,27 @@ export async function POST(req: Request) {
   const h = await headers();
   const ip = clientIp(h);
 
-  if (!allow(`post:${ip ?? "unknown"}`, 5, 10 * 60 * 1000)) {
-    return NextResponse.json(
-      { error: "Slow down. Try again in a few minutes." },
-      { status: 429 },
-    );
-  }
-
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json({ error: "That confession looks malformed." }, { status: 400 });
   }
   const { body, tag, mood, fromBlock, fromCourse, toBlock, signals } = parsed.data;
+
+  // Limited on both the address and the device, so spoofing one header does
+  // not hand the caller a fresh quota.
+  const device = typeof signals.fingerprint === "string" ? signals.fingerprint : "unknown";
+  const window = 10 * 60 * 1000;
+  if (
+    !allowAll([
+      { key: `post:ip:${ip ?? "unknown"}`, limit: 5, windowMs: window },
+      { key: `post:dev:${device}`, limit: 5, windowMs: window },
+    ])
+  ) {
+    return NextResponse.json(
+      { error: "Slow down. Try again in a few minutes." },
+      { status: 429 },
+    );
+  }
 
   const target = getBlock(toBlock);
   if (!target?.receiving) {
