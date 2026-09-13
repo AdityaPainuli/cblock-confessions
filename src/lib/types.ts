@@ -13,12 +13,13 @@ export const TAGS = [
 
 export type Tag = (typeof TAGS)[number];
 
+// Accents sit in the campus range: maroon, terracotta, sandstone green, slate.
 export const MOODS: { id: Mood; label: string; emoji: string; accent: string }[] = [
-  { id: "crush", label: "Crush", emoji: "\u{1F495}", accent: "#ff5fa2" },
-  { id: "guilt", label: "Guilt", emoji: "\u{1F62C}", accent: "#7c5cff" },
-  { id: "rage", label: "Rage", emoji: "\u{1F621}", accent: "#ff6b35" },
-  { id: "cringe", label: "Cringe", emoji: "\u{1F480}", accent: "#35d6a4" },
-  { id: "neutral", label: "Neutral", emoji: "\u{1F4AC}", accent: "#4cc9f0" },
+  { id: "crush", label: "Crush", emoji: "\u{1F495}", accent: "#b23a5e" },
+  { id: "guilt", label: "Guilt", emoji: "\u{1F62C}", accent: "#7d5ba6" },
+  { id: "rage", label: "Rage", emoji: "\u{1F621}", accent: "#bf5227" },
+  { id: "cringe", label: "Cringe", emoji: "\u{1F480}", accent: "#3f7d5e" },
+  { id: "neutral", label: "Neutral", emoji: "\u{1F4AC}", accent: "#4a7b96" },
 ];
 
 export const MOOD_ACCENT: Record<Mood, string> = MOODS.reduce(
@@ -31,8 +32,19 @@ export type Confession = {
   body: string;
   tag: string;
   mood: Mood;
+  /** The wall this confession was posted to. */
+  to_block: string;
   hearts: number;
   created_at: string;
+};
+
+/**
+ * Where the author studies. Collected for insight into which blocks are using
+ * the wall; kept out of the public card so a confession stays unattributable.
+ */
+export type Origin = {
+  fromBlock: string;
+  fromCourse?: string;
 };
 
 /** Signals the browser hands us. Never shown in the public UI. */

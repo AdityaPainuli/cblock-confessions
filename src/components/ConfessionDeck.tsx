@@ -36,7 +36,7 @@ export default function ConfessionDeck({
 
   if (!items.length) {
     return (
-      <p className="px-6 text-center text-white/50">
+      <p className="px-6 text-center text-muted">
         No confessions yet. Be the first one out of C block.
       </p>
     );
@@ -44,11 +44,11 @@ export default function ConfessionDeck({
 
   if (index >= items.length) {
     return (
-      <div className="px-6 text-center text-white/60">
+      <div className="px-6 text-center text-muted">
         <p className="text-lg">That&apos;s every secret on the wall.</p>
         <button
           onClick={() => setIndex(0)}
-          className="mt-4 rounded-full border border-white/20 px-5 py-2 text-sm text-white/80 transition hover:bg-white/10"
+          className="mt-4 rounded-full border border-line px-5 py-2 text-sm text-foreground transition hover:bg-maroon/8"
         >
           Read them again
         </button>
@@ -93,13 +93,13 @@ export default function ConfessionDeck({
                   <>
                     <motion.span
                       style={{ opacity: likeOpacity }}
-                      className="pointer-events-none absolute left-6 top-6 rounded-lg border-2 border-[#ff5fa2] px-3 py-1 text-lg font-bold uppercase tracking-widest text-[#ff5fa2]"
+                      className="pointer-events-none absolute left-6 top-6 rounded-lg border-2 border-maroon px-3 py-1 text-lg font-bold uppercase tracking-widest text-maroon"
                     >
                       felt that
                     </motion.span>
                     <motion.span
                       style={{ opacity: skipOpacity }}
-                      className="pointer-events-none absolute right-6 top-6 rounded-lg border-2 border-white/50 px-3 py-1 text-lg font-bold uppercase tracking-widest text-white/60"
+                      className="pointer-events-none absolute right-6 top-6 rounded-lg border-2 border-muted/50 px-3 py-1 text-lg font-bold uppercase tracking-widest text-muted"
                     >
                       nope
                     </motion.span>
@@ -115,14 +115,14 @@ export default function ConfessionDeck({
         <button
           onClick={() => advance(-1)}
           aria-label="Skip confession"
-          className="grid h-14 w-14 place-items-center rounded-full border border-white/15 bg-white/5 text-2xl text-white/70 transition hover:scale-110 hover:bg-white/10"
+          className="grid h-14 w-14 place-items-center rounded-full border border-line bg-surface text-2xl text-muted shadow-sm transition hover:scale-110 hover:text-foreground"
         >
           {"✕"}
         </button>
         <button
           onClick={() => advance(1)}
           aria-label="Heart confession"
-          className="grid h-16 w-16 place-items-center rounded-full bg-[#ff2f87] text-2xl text-white shadow-[0_12px_40px_-8px_#ff2f87] transition hover:scale-110"
+          className="grid h-16 w-16 place-items-center rounded-full bg-maroon text-2xl text-[#fff4e6] shadow-[0_14px_34px_-12px_rgba(139,26,43,0.85)] transition hover:scale-110"
         >
           {"♥"}
         </button>

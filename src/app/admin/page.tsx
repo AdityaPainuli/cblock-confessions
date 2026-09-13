@@ -13,7 +13,7 @@ export default async function AdminPage() {
     rows = (await listAdmin()) as AdminRow[];
   } catch (e) {
     return (
-      <main className="p-10 text-rose-300">
+      <main className="min-h-[100dvh] bg-background p-10 text-maroon">
         <p className="font-mono text-sm">Database error: {(e as Error).message}</p>
       </main>
     );

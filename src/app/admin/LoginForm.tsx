@@ -24,22 +24,22 @@ export default function LoginForm() {
   }
 
   return (
-    <main className="grid min-h-[100dvh] place-items-center bg-[#070b12] px-6 text-white">
+    <main className="grid min-h-[100dvh] place-items-center bg-background px-6 text-foreground">
       <form onSubmit={submit} className="w-full max-w-sm">
         <h1 className="text-2xl font-semibold">C Block admin</h1>
-        <p className="mt-1 text-sm text-white/40">Moderation and submission logs.</p>
+        <p className="mt-1 text-sm text-muted">Moderation and submission logs.</p>
         <input
           type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           placeholder="Admin password"
           autoFocus
-          className="mt-6 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 focus:border-[#ff2f87]/60 focus:outline-none"
+          className="mt-6 w-full rounded-xl border border-line bg-surface px-4 py-3 focus:border-maroon/60 focus:outline-none"
         />
-        {error && <p className="mt-3 text-sm text-[#ff8080]">{error}</p>}
+        {error && <p className="mt-3 text-sm text-[#a32b2b]">{error}</p>}
         <button
           disabled={busy}
-          className="mt-4 w-full rounded-xl bg-[#ff2f87] py-3 font-medium disabled:opacity-50"
+          className="mt-4 w-full rounded-xl bg-maroon py-3 font-medium text-[#fff4e6] disabled:opacity-50"
         >
           {busy ? "Checking..." : "Enter"}
         </button>

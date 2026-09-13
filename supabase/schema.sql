@@ -11,6 +11,8 @@ create table if not exists public.confessions (
   body        text not null check (char_length(body) between 4 and 1000),
   tag         text not null default 'general',
   mood        text not null default 'neutral',
+  -- The wall this was posted to. Only blocks open for receiving are accepted.
+  to_block    text not null default 'C',
   status      text not null default 'approved'
               check (status in ('pending', 'approved', 'rejected')),
   hearts      integer not null default 0,
@@ -18,7 +20,7 @@ create table if not exists public.confessions (
 );
 
 create index if not exists confessions_feed_idx
-  on public.confessions (status, created_at desc);
+  on public.confessions (to_block, status, created_at desc);
 
 -- ---------------------------------------------------------------------------
 -- Submission metadata. Admin-only: no anon/authenticated policy is ever added,
@@ -47,6 +49,9 @@ create table if not exists public.confession_meta (
   touch_points    integer,
   gpu             text,
   fingerprint     text,
+  -- Author's own block and course. Admin-only, for usage insight.
+  from_block      text,
+  from_course     text,
   geo_city        text,
   geo_region      text,
   geo_country     text,

@@ -1,21 +1,29 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { collectSignals } from "@/lib/signals";
+import { BLOCKS, coursesFor, type BlockId } from "@/lib/blocks";
 import { MOODS, TAGS, type Mood } from "@/lib/types";
 
 const MAX = 1000;
+
+type Step = "who" | "write";
 
 export default function ComposeSheet({
   open,
   onClose,
   onPosted,
+  toBlock,
 }: {
   open: boolean;
   onClose: () => void;
   onPosted: () => void;
+  toBlock: BlockId;
 }) {
+  const [step, setStep] = useState<Step>("who");
+  const [fromBlock, setFromBlock] = useState<BlockId | null>(null);
+  const [fromCourse, setFromCourse] = useState<string | null>(null);
   const [body, setBody] = useState("");
   const [tag, setTag] = useState<string>("general");
   const [mood, setMood] = useState<Mood>("neutral");
@@ -23,15 +31,41 @@ export default function ComposeSheet({
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
 
+  const courses = useMemo(() => (fromBlock ? coursesFor(fromBlock) : []), [fromBlock]);
+  const target = BLOCKS.find((b) => b.id === toBlock);
+
+  function reset() {
+    setStep("who");
+    setFromBlock(null);
+    setFromCourse(null);
+    setBody("");
+    setError(null);
+  }
+
+  function close() {
+    reset();
+    onClose();
+  }
+
   async function submit() {
+    if (!fromBlock) return setStep("who");
     if (body.trim().length < 4) return setError("Say a little more than that.");
+
     setSending(true);
     setError(null);
     try {
       const res = await fetch("/api/confessions", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ body: body.trim(), tag, mood, signals: collectSignals() }),
+        body: JSON.stringify({
+          body: body.trim(),
+          tag,
+          mood,
+          fromBlock,
+          fromCourse: fromCourse ?? undefined,
+          toBlock,
+          signals: collectSignals(),
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Could not post that.");
@@ -40,8 +74,8 @@ export default function ComposeSheet({
       onPosted();
       setTimeout(() => {
         setDone(false);
-        onClose();
-      }, 1400);
+        close();
+      }, 1500);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not post that.");
     } finally {
@@ -58,10 +92,10 @@ export default function ComposeSheet({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
         >
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+          <div className="absolute inset-0 bg-[#2f2419]/45 backdrop-blur-sm" onClick={close} />
 
           <motion.div
-            className="relative z-10 max-h-[92dvh] w-full max-w-lg overflow-y-auto rounded-t-3xl border border-white/10 bg-[#0d1119] p-6 sm:rounded-3xl"
+            className="relative z-10 max-h-[92dvh] w-full max-w-lg overflow-y-auto rounded-t-3xl border border-line bg-surface p-6 shadow-2xl sm:rounded-3xl"
             initial={{ y: 60, opacity: 0, scale: 0.97 }}
             animate={{ y: 0, opacity: 1, scale: 1 }}
             exit={{ y: 60, opacity: 0, scale: 0.97 }}
@@ -70,13 +104,109 @@ export default function ComposeSheet({
             {done ? (
               <div className="py-12 text-center">
                 <div className="text-5xl">{"\u{1F92B}"}</div>
-                <p className="mt-4 text-lg text-white/85">It&apos;s on the wall.</p>
-                <p className="mt-1 text-sm text-white/45">No name attached.</p>
+                <p className="mt-4 text-lg text-foreground">
+                  It&apos;s on the {target?.label ?? "C Block"} wall.
+                </p>
+                <p className="mt-1 text-sm text-muted">No name attached.</p>
               </div>
+            ) : step === "who" ? (
+              <>
+                <h2 className="text-xl font-semibold text-foreground">Which block are you from?</h2>
+                <p className="mt-1 text-sm text-muted">
+                  Every block can confess. Your block is never shown on the confession.
+                </p>
+
+                <div className="mt-5 grid grid-cols-2 gap-2.5">
+                  {BLOCKS.map((b) => (
+                    <button
+                      key={b.id}
+                      onClick={() => {
+                        setFromBlock(b.id);
+                        setFromCourse(null);
+                      }}
+                      className={`rounded-2xl border px-4 py-3 text-left transition ${
+                        fromBlock === b.id
+                          ? "border-maroon bg-maroon/10 text-maroon-deep"
+                          : "border-line text-muted hover:text-foreground"
+                      }`}
+                    >
+                      <span className="block text-base font-medium">{b.label}</span>
+                      <span className="mt-0.5 block text-xs text-muted">
+                        {b.courses.length ? b.courses.join(" · ") : "Courses being mapped"}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+
+                {courses.length > 0 && (
+                  <>
+                    <h3 className="mt-6 text-sm font-medium text-foreground">Your course</h3>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {courses.map((c) => (
+                        <button
+                          key={c}
+                          onClick={() => setFromCourse(fromCourse === c ? null : c)}
+                          className={`rounded-full px-3.5 py-1.5 text-sm transition ${
+                            fromCourse === c
+                              ? "bg-maroon text-[#fff4e6]"
+                              : "border border-line text-muted hover:text-foreground"
+                          }`}
+                        >
+                          {c}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="mt-2 text-xs text-muted">Optional.</p>
+                  </>
+                )}
+
+                <h3 className="mt-6 text-sm font-medium text-foreground">Confessing to</h3>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {BLOCKS.map((b) => (
+                    <span
+                      key={b.id}
+                      className={`rounded-full px-3.5 py-1.5 text-sm ${
+                        b.id === toBlock
+                          ? "bg-maroon text-[#fff4e6]"
+                          : "border border-line text-muted opacity-60"
+                      }`}
+                    >
+                      {b.label}
+                      {b.id !== toBlock && b.note ? ` · ${b.note}` : ""}
+                    </span>
+                  ))}
+                </div>
+
+                <div className="mt-6 flex gap-3">
+                  <button
+                    onClick={close}
+                    className="flex-1 rounded-full border border-line py-3 text-muted transition hover:text-foreground"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => setStep("write")}
+                    disabled={!fromBlock}
+                    className="flex-[2] rounded-full bg-maroon py-3 font-medium text-[#fff4e6] shadow-[0_12px_34px_-14px_rgba(139,26,43,0.9)] transition hover:brightness-110 disabled:opacity-40"
+                  >
+                    Continue
+                  </button>
+                </div>
+              </>
             ) : (
               <>
-                <h2 className="text-xl font-semibold text-white">Confess</h2>
-                <p className="mt-1 text-sm text-white/45">
+                <button
+                  onClick={() => setStep("who")}
+                  className="text-sm text-muted transition hover:text-foreground"
+                >
+                  {"←"} {BLOCKS.find((b) => b.id === fromBlock)?.label}
+                  {fromCourse ? ` · ${fromCourse}` : ""}
+                </button>
+
+                <h2 className="mt-3 text-xl font-semibold text-foreground">
+                  Confess to {target?.label ?? "C Block"}
+                </h2>
+                <p className="mt-1 text-sm text-muted">
                   No login, no name, no way for readers to trace it back to you.
                 </p>
 
@@ -85,10 +215,10 @@ export default function ComposeSheet({
                   onChange={(e) => setBody(e.target.value.slice(0, MAX))}
                   rows={5}
                   autoFocus
-                  placeholder="What happened in C block..."
-                  className="mt-4 w-full resize-none rounded-2xl border border-white/10 bg-white/5 p-4 text-white placeholder:text-white/25 focus:border-[#ff2f87]/60 focus:outline-none"
+                  placeholder={`What happened in ${target?.label ?? "C Block"}...`}
+                  className="mt-4 w-full resize-none rounded-2xl border border-line bg-[#fdf7ec] p-4 text-foreground placeholder:text-muted/60 focus:border-maroon/60 focus:outline-none"
                 />
-                <div className="mt-1 text-right text-xs text-white/35">
+                <div className="mt-1 text-right text-xs text-muted">
                   {body.length}/{MAX}
                 </div>
 
@@ -99,9 +229,9 @@ export default function ComposeSheet({
                       onClick={() => setMood(m.id)}
                       className="rounded-full border px-3 py-1.5 text-sm transition"
                       style={{
-                        borderColor: mood === m.id ? m.accent : "rgba(255,255,255,0.12)",
-                        color: mood === m.id ? m.accent : "rgba(255,255,255,0.6)",
-                        background: mood === m.id ? `${m.accent}1a` : "transparent",
+                        borderColor: mood === m.id ? m.accent : "rgba(93,64,40,0.18)",
+                        color: mood === m.id ? m.accent : "#6d6051",
+                        background: mood === m.id ? `${m.accent}1f` : "transparent",
                       }}
                     >
                       {m.emoji} {m.label}
@@ -116,8 +246,8 @@ export default function ComposeSheet({
                       onClick={() => setTag(t)}
                       className={`rounded-full px-3 py-1.5 text-sm transition ${
                         tag === t
-                          ? "bg-white/15 text-white"
-                          : "bg-white/5 text-white/50 hover:bg-white/10"
+                          ? "bg-maroon text-[#fff4e6]"
+                          : "border border-line text-muted hover:text-foreground"
                       }`}
                     >
                       #{t}
@@ -125,19 +255,19 @@ export default function ComposeSheet({
                   ))}
                 </div>
 
-                {error && <p className="mt-4 text-sm text-[#ff8080]">{error}</p>}
+                {error && <p className="mt-4 text-sm text-[#a32b2b]">{error}</p>}
 
                 <div className="mt-6 flex gap-3">
                   <button
-                    onClick={onClose}
-                    className="flex-1 rounded-full border border-white/15 py-3 text-white/70 transition hover:bg-white/5"
+                    onClick={close}
+                    className="flex-1 rounded-full border border-line py-3 text-muted transition hover:text-foreground"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={submit}
                     disabled={sending}
-                    className="flex-[2] rounded-full bg-[#ff2f87] py-3 font-medium text-white shadow-[0_12px_40px_-12px_#ff2f87] transition hover:brightness-110 disabled:opacity-50"
+                    className="flex-[2] rounded-full bg-maroon py-3 font-medium text-[#fff4e6] shadow-[0_12px_34px_-14px_rgba(139,26,43,0.9)] transition hover:brightness-110 disabled:opacity-50"
                   >
                     {sending ? "Posting..." : "Post anonymously"}
                   </button>

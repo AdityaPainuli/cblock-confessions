@@ -1,22 +1,23 @@
 "use client";
 
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { Stars, useGLTF } from "@react-three/drei";
+import { useGLTF } from "@react-three/drei";
 import * as THREE from "three";
 import Campus from "./Campus";
 
 export type Stage = "campus" | "block";
 
 const VIEWS: Record<Stage, { pos: THREE.Vector3; look: THREE.Vector3 }> = {
-  campus: { pos: new THREE.Vector3(3, 15, 52), look: new THREE.Vector3(3, 7, 4) },
-  block: { pos: new THREE.Vector3(16, 5, 36), look: new THREE.Vector3(17.5, 4.5, 19) },
+  // Looking straight down the axial plaza, through the gate.
+  campus: { pos: new THREE.Vector3(16, 30, 92), look: new THREE.Vector3(2, 9, 6) },
+  // Standing at the C Block entrance.
+  block: { pos: new THREE.Vector3(19, 8, 63), look: new THREE.Vector3(26, 7, 34) },
 };
 
-/** Glides the camera between the campus overview and the C Block doorway. */
 function CameraRig({ stage }: { stage: Stage }) {
   const { camera } = useThree();
-  const look = useRef(VIEWS.campus.look.clone());
+  const look = useMemo(() => VIEWS.campus.look.clone(), []);
 
   useFrame((state, delta) => {
     const view = VIEWS[stage];
@@ -24,19 +25,44 @@ function CameraRig({ stage }: { stage: Stage }) {
 
     const target = view.pos.clone();
     if (stage === "campus") {
-      // lazy orbit so the overview never feels like a static render
-      const a = state.clock.elapsedTime * 0.09;
-      target.x += Math.sin(a) * 10;
+      // Slow drift, so the overview never looks like a still render.
+      const a = state.clock.elapsedTime * 0.06;
+      target.x += Math.sin(a) * 13;
+      target.y += Math.sin(a * 0.8) * 2.4;
       target.z += Math.cos(a) * 6;
-      target.y += Math.sin(a * 0.7) * 2;
     }
 
     camera.position.lerp(target, t);
-    look.current.lerp(view.look, t);
-    camera.lookAt(look.current);
+    look.lerp(view.look, t);
+    camera.lookAt(look);
   });
 
   return null;
+}
+
+/** Warm dusk gradient, painted into a canvas rather than pulled from a CDN. */
+function Sky() {
+  const texture = useMemo(() => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 4;
+    canvas.height = 256;
+    const ctx = canvas.getContext("2d")!;
+    const g = ctx.createLinearGradient(0, 0, 0, 256);
+    g.addColorStop(0, "#5f86b4");
+    g.addColorStop(0.42, "#b9c8d2");
+    g.addColorStop(0.68, "#f0d9b4");
+    g.addColorStop(1, "#f6c893");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 4, 256);
+    return new THREE.CanvasTexture(canvas);
+  }, []);
+
+  return (
+    <mesh scale={[-1, 1, 1]}>
+      <sphereGeometry args={[300, 32, 24]} />
+      <meshBasicMaterial map={texture} side={THREE.BackSide} depthWrite={false} toneMapped={false} />
+    </mesh>
+  );
 }
 
 /** Uses a real campus model when one is dropped at /public/models/campus.glb. */
@@ -67,25 +93,30 @@ export default function CampusScene({ stage }: { stage: Stage }) {
       shadows
       dpr={[1, 1.6]}
       gl={{ antialias: true, powerPreference: "high-performance" }}
-      camera={{ position: [3, 15, 52], fov: 48, near: 0.5, far: 400 }}
+      camera={{ position: [16, 30, 92], fov: 48, near: 0.5, far: 700 }}
     >
-      <color attach="background" args={["#070b12"]} />
-      <fog attach="fog" args={["#070b12", 90, 230]} />
+      <fog attach="fog" args={["#e8d4b6", 200, 470]} />
 
-      <hemisphereLight args={["#7fb0ff", "#0b1018", 1.1]} />
+      {/* Late afternoon: low warm sun, cool sky bounce off the sandstone. */}
+      <hemisphereLight args={["#cfe0f2", "#8a7757", 1.35]} />
       <directionalLight
-        position={[18, 30, 20]}
-        intensity={1.8}
-        color="#bfd8ff"
+        position={[-70, 52, 70]}
+        intensity={2.5}
+        color="#ffd9a3"
         castShadow
-        shadow-mapSize={[1024, 1024]}
+        shadow-mapSize={[2048, 2048]}
+        shadow-camera-left={-110}
+        shadow-camera-right={110}
+        shadow-camera-top={110}
+        shadow-camera-bottom={-110}
+        shadow-camera-far={300}
       />
+      <ambientLight intensity={0.35} color="#f0e2cc" />
 
-      <Suspense fallback={null}>
-        {model ? <GltfCampus url={model} /> : <Campus />}
-      </Suspense>
+      <Sky />
 
-      <Stars radius={140} depth={50} count={2200} factor={4} fade speed={0.6} />
+      <Suspense fallback={null}>{model ? <GltfCampus url={model} /> : <Campus />}</Suspense>
+
       <CameraRig stage={stage} />
     </Canvas>
   );

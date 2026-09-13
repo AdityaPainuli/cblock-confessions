@@ -1,7 +1,7 @@
 import "server-only";
 import { randomUUID } from "crypto";
 import { createAdminClient } from "./supabase/admin";
-import type { Confession, Mood } from "./types";
+import type { Confession, Mood, Origin } from "./types";
 
 export type MetaRow = Record<string, unknown> & { confession_id: string };
 export type AdminConfession = Confession & {
@@ -30,6 +30,7 @@ const SEED: Omit<AdminConfession, "meta">[] = [
     body: "I have been sitting in the wrong section for three weeks and the professor still marks me present. At this point it is my section.",
     tag: "attendance",
     mood: "cringe",
+    to_block: "C",
     status: "approved",
     hearts: 42,
     created_at: new Date(Date.now() - 36e5).toISOString(),
@@ -39,6 +40,7 @@ const SEED: Omit<AdminConfession, "meta">[] = [
     body: "Whoever plays guitar on the C block stairs at 6pm, I plan my whole evening around walking past. That is all.",
     tag: "crush",
     mood: "crush",
+    to_block: "C",
     status: "approved",
     hearts: 118,
     created_at: new Date(Date.now() - 9e6).toISOString(),
@@ -48,6 +50,7 @@ const SEED: Omit<AdminConfession, "meta">[] = [
     body: "I told my group I finished my part of the project. I have not opened the file. The presentation is tomorrow. Pray for me.",
     tag: "exams",
     mood: "guilt",
+    to_block: "C",
     status: "approved",
     hearts: 87,
     created_at: new Date(Date.now() - 18e6).toISOString(),
@@ -57,6 +60,7 @@ const SEED: Omit<AdminConfession, "meta">[] = [
     body: "The canteen samosa went from 15 to 25 rupees and nobody is protesting. This is the real crisis on campus.",
     tag: "canteen",
     mood: "rage",
+    to_block: "C",
     status: "approved",
     hearts: 203,
     created_at: new Date(Date.now() - 26e6).toISOString(),
@@ -82,16 +86,25 @@ const memory: MemoryStore = (globalStore.__cbcMemory ??= {
   meta: new Map(),
 });
 
-export async function listPublic(tag?: string | null): Promise<Confession[]> {
+export async function listPublic(
+  tag?: string | null,
+  toBlock: string = "C",
+): Promise<Confession[]> {
   if (!hasSupabase()) {
     return memory.confessions
-      .filter((c) => c.status === "approved" && (!tag || tag === "all" || c.tag === tag))
+      .filter(
+        (c) =>
+          c.status === "approved" &&
+          c.to_block === toBlock &&
+          (!tag || tag === "all" || c.tag === tag),
+      )
       .sort((a, b) => b.created_at.localeCompare(a.created_at))
       .map((c) => ({
         id: c.id,
         body: c.body,
         tag: c.tag,
         mood: c.mood,
+        to_block: c.to_block,
         hearts: c.hearts,
         created_at: c.created_at,
       }));
@@ -99,8 +112,9 @@ export async function listPublic(tag?: string | null): Promise<Confession[]> {
 
   let query = createAdminClient()
     .from("confessions")
-    .select("id, body, tag, mood, hearts, created_at")
+    .select("id, body, tag, mood, to_block, hearts, created_at")
     .eq("status", "approved")
+    .eq("to_block", toBlock)
     .order("created_at", { ascending: false })
     .limit(60);
 
@@ -112,9 +126,18 @@ export async function listPublic(tag?: string | null): Promise<Confession[]> {
 }
 
 export async function create(
-  input: { body: string; tag: string; mood: Mood },
+  input: { body: string; tag: string; mood: Mood; to_block: string },
+  origin: Origin,
   meta: Record<string, unknown>,
 ): Promise<string> {
+  // The author's own block never reaches the public row; it lives in the
+  // admin-only meta table alongside the rest of the submission context.
+  const fullMeta = {
+    ...meta,
+    from_block: origin.fromBlock,
+    from_course: origin.fromCourse,
+  };
+
   if (!hasSupabase()) {
     const id = randomUUID();
     memory.confessions.unshift({
@@ -124,7 +147,7 @@ export async function create(
       hearts: 0,
       created_at: new Date().toISOString(),
     });
-    memory.meta.set(id, meta);
+    memory.meta.set(id, fullMeta);
     return id;
   }
 
@@ -137,7 +160,7 @@ export async function create(
 
   if (error || !data) throw new Error(error?.message ?? "Insert failed.");
 
-  await supabase.from("confession_meta").insert({ confession_id: data.id, ...meta });
+  await supabase.from("confession_meta").insert({ confession_id: data.id, ...fullMeta });
   return data.id;
 }
 

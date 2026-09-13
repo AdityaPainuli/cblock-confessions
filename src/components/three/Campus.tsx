@@ -3,292 +3,603 @@
 import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
-
-const CREAM = "#ece4d2";
-const CREAM_DARK = "#c9bfa8";
-const ROOF = "#8d5a3b";
-const GLASS = "#3fd0ff";
+import { BRAND, CAMPUS } from "@/lib/palette";
 
 /**
- * Text rendered into a canvas texture. Keeps the scene free of any runtime
- * font download, which matters when this is demoed on campus wifi.
+ * Text baked into a canvas texture. Keeps the scene free of any runtime font
+ * download, which matters when this gets demoed on campus wifi.
  */
 function Label({
   text,
   position,
+  rotation = [0, 0, 0],
   width,
   height,
   color,
+  weight = 700,
+  spacing = 8,
+  serif = false,
 }: {
   text: string;
   position: [number, number, number];
+  rotation?: [number, number, number];
   width: number;
   height: number;
   color: string;
+  weight?: number;
+  spacing?: number;
+  serif?: boolean;
 }) {
   const texture = useMemo(() => {
     const canvas = document.createElement("canvas");
     canvas.width = 1024;
-    canvas.height = Math.round((1024 * height) / width);
+    canvas.height = Math.max(32, Math.round((1024 * height) / width));
     const ctx = canvas.getContext("2d")!;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = color;
-    ctx.font = `700 ${Math.round(canvas.height * 0.58)}px "Helvetica Neue", Arial, sans-serif`;
+    const family = serif ? '"Times New Roman", Georgia, serif' : "Helvetica, Arial, sans-serif";
+    ctx.font = `${weight} ${Math.round(canvas.height * 0.6)}px ${family}`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.letterSpacing = "8px";
+    ctx.letterSpacing = `${spacing}px`;
     ctx.fillText(text, canvas.width / 2, canvas.height / 2);
     const tex = new THREE.CanvasTexture(canvas);
     tex.anisotropy = 4;
     return tex;
-  }, [text, width, height, color]);
+  }, [text, width, height, color, weight, spacing, serif]);
 
   return (
-    <mesh position={position}>
+    <mesh position={position} rotation={rotation}>
       <planeGeometry args={[width, height]} />
       <meshBasicMaterial map={texture} transparent toneMapped={false} />
     </mesh>
   );
 }
 
-/** Row of windows on a facade, drawn as one emissive plane grid. */
-function Windows({
-  count,
-  rows,
+/**
+ * Continuous glazing band, the horizontal ribbon that runs across every
+ * academic block on this campus rather than punched individual windows.
+ */
+function GlazingBands({
+  floors,
   width,
-  height,
-  z,
-  color = GLASS,
+  depth,
+  floorHeight,
+  base = 1.6,
+  lit = false,
 }: {
-  count: number;
-  rows: number;
+  floors: number;
   width: number;
-  height: number;
-  z: number;
-  color?: string;
+  depth: number;
+  floorHeight: number;
+  base?: number;
+  lit?: boolean;
 }) {
-  const cells = useMemo(() => {
-    const out: [number, number][] = [];
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < count; c++) {
-        const x = (c - (count - 1) / 2) * (width / count);
-        const y = (r - (rows - 1) / 2) * (height / rows);
-        out.push([x, y]);
-      }
-    }
-    return out;
-  }, [count, rows, width, height]);
-
-  return (
-    <group position={[0, 0, z]}>
-      {cells.map(([x, y], i) => (
-        <mesh key={i} position={[x, y, 0]}>
-          <planeGeometry args={[width / count / 1.9, height / rows / 2.4]} />
-          <meshStandardMaterial
-            color={color}
-            emissive={color}
-            emissiveIntensity={i % 5 === 0 ? 1.6 : 0.55}
-            toneMapped={false}
-          />
-        </mesh>
-      ))}
-    </group>
-  );
-}
-
-/** The colonnaded main block, the building everyone pictures for Galgotias. */
-function MainBuilding() {
-  const columns = useMemo(() => Array.from({ length: 13 }, (_, i) => (i - 6) * 2.4), []);
-
-  return (
-    <group position={[0, 0, -6]}>
-      <mesh position={[0, 4, 0]} castShadow receiveShadow>
-        <boxGeometry args={[34, 8, 12]} />
-        <meshStandardMaterial color={CREAM} roughness={0.85} />
-      </mesh>
-
-      {/* central tower + pediment */}
-      <mesh position={[0, 9.5, 1]} castShadow>
-        <boxGeometry args={[12, 5, 10]} />
-        <meshStandardMaterial color={CREAM} roughness={0.8} />
-      </mesh>
-      <mesh position={[0, 12.6, 1]} rotation={[0, Math.PI / 4, 0]} castShadow>
-        <coneGeometry args={[7.6, 3.2, 4]} />
-        <meshStandardMaterial color={ROOF} roughness={0.7} />
-      </mesh>
-      <mesh position={[0, 15, 1]}>
-        <sphereGeometry args={[0.7, 16, 16]} />
-        <meshStandardMaterial color="#ffce5c" emissive="#ffce5c" emissiveIntensity={2} toneMapped={false} />
-      </mesh>
-
-      {/* colonnade */}
-      {columns.map((x) => (
-        <mesh key={x} position={[x, 3.4, 6.4]} castShadow>
-          <cylinderGeometry args={[0.52, 0.6, 6.8, 12]} />
-          <meshStandardMaterial color={CREAM} roughness={0.6} />
-        </mesh>
-      ))}
-      <mesh position={[0, 7.2, 6.4]}>
-        <boxGeometry args={[34, 1.2, 2.6]} />
-        <meshStandardMaterial color={CREAM_DARK} roughness={0.8} />
-      </mesh>
-
-      <Windows count={12} rows={2} width={32} height={5} z={6.06} />
-
-      <Label
-        text="GALGOTIAS UNIVERSITY"
-        position={[0, 8.4, 7.8]}
-        width={16}
-        height={1.6}
-        color="#ffe9a8"
-      />
-    </group>
-  );
-}
-
-/** A generic academic block. `highlight` turns it into the C Block target. */
-function Block({
-  position,
-  rotation = 0,
-  label,
-  size = [12, 9, 9] as [number, number, number],
-  highlight = false,
-}: {
-  position: [number, number, number];
-  rotation?: number;
-  label: string;
-  size?: [number, number, number];
-  highlight?: boolean;
-}) {
-  const sign = useRef<THREE.Mesh>(null);
-  const [w, h, d] = size;
-
-  useFrame(({ clock }) => {
-    if (!highlight || !sign.current) return;
-    const m = sign.current.material as THREE.MeshStandardMaterial;
-    m.emissiveIntensity = 1.8 + Math.sin(clock.elapsedTime * 2.2) * 0.8;
-  });
-
-  return (
-    <group position={position} rotation={[0, rotation, 0]}>
-      <mesh position={[0, h / 2, 0]} castShadow receiveShadow>
-        <boxGeometry args={[w, h, d]} />
-        <meshStandardMaterial color={CREAM} roughness={0.9} />
-      </mesh>
-      <mesh position={[0, h + 0.25, 0]}>
-        <boxGeometry args={[w + 0.8, 0.5, d + 0.8]} />
-        <meshStandardMaterial color={ROOF} roughness={0.7} />
-      </mesh>
-
-      <Windows
-        count={4}
-        rows={3}
-        width={w - 2}
-        height={h - 2.5}
-        z={d / 2 + 0.06}
-        color={highlight ? "#ff5fa2" : GLASS}
-      />
-
-      {/* entrance */}
-      <mesh position={[0, 1.6, d / 2 + 0.08]}>
-        <planeGeometry args={[3.2, 3.2]} />
-        <meshStandardMaterial
-          color={highlight ? "#ff9ecb" : "#1b2a3a"}
-          emissive={highlight ? "#ff5fa2" : "#0d1520"}
-          emissiveIntensity={highlight ? 1.4 : 0.2}
-          toneMapped={false}
-        />
-      </mesh>
-
-      <mesh ref={sign} position={[0, h - 1.1, d / 2 + 0.12]}>
-        <planeGeometry args={[w - 3, 1.5]} />
-        <meshStandardMaterial
-          color="#12060f"
-          emissive={highlight ? "#ff2f87" : "#20303f"}
-          emissiveIntensity={highlight ? 2 : 0.35}
-          toneMapped={false}
-        />
-      </mesh>
-      <Label
-        text={label}
-        position={[0, h - 1.1, d / 2 + 0.2]}
-        width={w - 3.4}
-        height={1.2}
-        color={highlight ? "#fff0f6" : "#9fb6c8"}
-      />
-    </group>
-  );
-}
-
-function Tree({ position }: { position: [number, number, number] }) {
-  return (
-    <group position={position}>
-      <mesh position={[0, 0.7, 0]}>
-        <cylinderGeometry args={[0.16, 0.22, 1.4, 6]} />
-        <meshStandardMaterial color="#4a3524" />
-      </mesh>
-      <mesh position={[0, 2.1, 0]} castShadow>
-        <coneGeometry args={[1.15, 3, 7]} />
-        <meshStandardMaterial color="#1f6f4a" roughness={1} />
-      </mesh>
-    </group>
-  );
-}
-
-function Lamp({ position }: { position: [number, number, number] }) {
-  return (
-    <group position={position}>
-      <mesh position={[0, 1.7, 0]}>
-        <cylinderGeometry args={[0.07, 0.09, 3.4, 6]} />
-        <meshStandardMaterial color="#2b3440" />
-      </mesh>
-      <mesh position={[0, 3.5, 0]}>
-        <sphereGeometry args={[0.26, 12, 12]} />
-        <meshStandardMaterial color="#ffd79a" emissive="#ffc46b" emissiveIntensity={2.4} toneMapped={false} />
-      </mesh>
-      <pointLight position={[0, 3.5, 0]} color="#ffc46b" intensity={7} distance={12} decay={2} />
-    </group>
-  );
-}
-
-export default function Campus() {
-  const trees = useMemo<[number, number, number][]>(
-    () => [
-      [-22, 0, 12], [-17, 0, 17], [-26, 0, 2], [-12, 0, 22],
-      [-6, 0, 26], [6, 0, 26], [24, 0, 28], [30, 0, 10],
-    ],
-    [],
-  );
-  const lamps = useMemo<[number, number, number][]>(
-    () => [[-7, 0, 14], [7, 0, 14], [-7, 0, 24], [7, 0, 24]],
-    [],
+  const rows = useMemo(
+    () => Array.from({ length: floors }, (_, i) => base + i * floorHeight + floorHeight * 0.55),
+    [floors, floorHeight, base],
   );
 
   return (
     <group>
-      {/* ground */}
+      {rows.map((y, i) => (
+        <group key={y}>
+          {/* recessed glass */}
+          <mesh position={[0, y, depth / 2 - 0.18]}>
+            <boxGeometry args={[width - 2.2, floorHeight * 0.42, 0.3]} />
+            <meshStandardMaterial
+              color={CAMPUS.glass}
+              emissive={lit ? CAMPUS.interior : "#0d1318"}
+              emissiveIntensity={lit ? 0.5 + (i % 2) * 0.35 : 0.12}
+              roughness={0.25}
+              metalness={0.15}
+            />
+          </mesh>
+          {/* projecting slab that shades it */}
+          <mesh position={[0, y + floorHeight * 0.32, depth / 2 + 0.22]} castShadow>
+            <boxGeometry args={[width + 0.5, 0.34, 1.1]} />
+            <meshStandardMaterial color={CAMPUS.sand} roughness={0.9} />
+          </mesh>
+        </group>
+      ))}
+    </group>
+  );
+}
+
+/**
+ * Standing-seam barrel vault, the curved roof on the newer blocks. `axis` is
+ * the horizontal direction the vault runs along.
+ */
+function BarrelVault({
+  position,
+  length,
+  radius,
+  axis = "x",
+}: {
+  position: [number, number, number];
+  length: number;
+  radius: number;
+  axis?: "x" | "z";
+}) {
+  return (
+    <group position={position} rotation={[0, axis === "x" ? Math.PI / 2 : 0, 0]}>
+      <mesh rotation={[Math.PI / 2, 0, 0]} castShadow>
+        <cylinderGeometry args={[radius, radius, length, 24, 1, true, Math.PI / 2, Math.PI]} />
+        <meshStandardMaterial
+          color={CAMPUS.vault}
+          side={THREE.DoubleSide}
+          roughness={0.45}
+          metalness={0.35}
+        />
+      </mesh>
+    </group>
+  );
+}
+
+/**
+ * One academic block. Cream sandstone mass, ribbon glazing, a red sandstone
+ * stair tower breaking the elevation, optionally capped with a barrel vault.
+ */
+function AcademicBlock({
+  position,
+  rotation = 0,
+  label,
+  width,
+  depth,
+  floors,
+  vault = false,
+  tower = true,
+  highlight = false,
+  underConstruction = false,
+}: {
+  position: [number, number, number];
+  rotation?: number;
+  label?: string;
+  width: number;
+  depth: number;
+  floors: number;
+  vault?: boolean;
+  tower?: boolean;
+  highlight?: boolean;
+  /** Draws scaffolding instead of a finished elevation. */
+  underConstruction?: boolean;
+}) {
+  const sign = useRef<THREE.Mesh>(null);
+  const floorHeight = 3.6;
+  const base = 1.6;
+  const height = base + floors * floorHeight;
+
+  useFrame(({ clock }) => {
+    if (!highlight || !sign.current) return;
+    const m = sign.current.material as THREE.MeshStandardMaterial;
+    m.emissiveIntensity = 1.5 + Math.sin(clock.elapsedTime * 2) * 0.7;
+  });
+
+  return (
+    <group position={position} rotation={[0, rotation, 0]}>
+      {/* plinth */}
+      <mesh position={[0, base / 2, 0]} receiveShadow castShadow>
+        <boxGeometry args={[width + 1, base, depth + 1]} />
+        <meshStandardMaterial color={CAMPUS.sandShade} roughness={0.95} />
+      </mesh>
+
+      {/* main mass */}
+      <mesh position={[0, base + (height - base) / 2, 0]} castShadow receiveShadow>
+        <boxGeometry args={[width, height - base, depth]} />
+        <meshStandardMaterial color={CAMPUS.sand} roughness={0.92} />
+      </mesh>
+
+      <GlazingBands
+        floors={floors}
+        width={width}
+        depth={depth}
+        floorHeight={floorHeight}
+        base={base}
+        lit={highlight}
+      />
+
+      {/* red sandstone stair tower */}
+      {tower && (
+        <mesh position={[width / 2 - 2.2, (height + 1.6) / 2, depth / 2 + 0.7]} castShadow>
+          <boxGeometry args={[4, height + 1.6, 2.8]} />
+          <meshStandardMaterial color={CAMPUS.terracotta} roughness={0.95} />
+        </mesh>
+      )}
+
+      {/* parapet */}
+      <mesh position={[0, height + 0.45, 0]} castShadow>
+        <boxGeometry args={[width + 0.9, 0.9, depth + 0.9]} />
+        <meshStandardMaterial color={CAMPUS.sandShade} roughness={0.9} />
+      </mesh>
+
+      {underConstruction && (
+        <group>
+          {Array.from({ length: 7 }, (_, i) => (i - 3) * (width / 7)).map((x) => (
+            <mesh key={x} position={[x, (height + 3) / 2, depth / 2 + 1.1]}>
+              <boxGeometry args={[0.16, height + 3, 0.16]} />
+              <meshStandardMaterial color="#9a8a63" roughness={1} />
+            </mesh>
+          ))}
+          {Array.from({ length: floors + 1 }, (_, i) => 2 + i * 3.6).map((y) => (
+            <mesh key={y} position={[0, y, depth / 2 + 1.1]}>
+              <boxGeometry args={[width, 0.14, 0.14]} />
+              <meshStandardMaterial color="#9a8a63" roughness={1} />
+            </mesh>
+          ))}
+          {/* crane */}
+          <mesh position={[width / 2 + 3, (height + 10) / 2, -depth / 3]}>
+            <boxGeometry args={[0.5, height + 10, 0.5]} />
+            <meshStandardMaterial color={CAMPUS.terracotta} roughness={0.9} />
+          </mesh>
+          <mesh position={[width / 2 - 3, height + 10, -depth / 3]}>
+            <boxGeometry args={[14, 0.45, 0.45]} />
+            <meshStandardMaterial color={CAMPUS.terracotta} roughness={0.9} />
+          </mesh>
+        </group>
+      )}
+
+      {vault && !underConstruction && (
+        <BarrelVault
+          position={[0, height + 0.8, 0]}
+          length={width * 0.88}
+          radius={depth * 0.34}
+          axis="x"
+        />
+      )}
+
+      {/* entrance portal */}
+      <mesh position={[-width / 6, base + 1.7, depth / 2 + 0.1]}>
+        <planeGeometry args={[5.4, 3.4]} />
+        <meshStandardMaterial
+          color={highlight ? "#f7e2cf" : CAMPUS.glass}
+          emissive={highlight ? BRAND.gold : "#10181e"}
+          emissiveIntensity={highlight ? 0.9 : 0.15}
+        />
+      </mesh>
+
+      {label && (
+        <>
+          <mesh ref={sign} position={[0, height - 1.4, depth / 2 + 0.14]}>
+            <planeGeometry args={[width * 0.62, 1.9]} />
+            <meshStandardMaterial
+              color={highlight ? BRAND.maroon : CAMPUS.sandShade}
+              emissive={highlight ? BRAND.maroon : "#000000"}
+              emissiveIntensity={highlight ? 1.6 : 0}
+              roughness={0.8}
+            />
+          </mesh>
+          <Label
+            text={label}
+            position={[0, height - 1.4, depth / 2 + 0.22]}
+            width={width * 0.58}
+            height={1.4}
+            color={highlight ? "#fff4e6" : BRAND.maroonDeep}
+            spacing={14}
+          />
+        </>
+      )}
+    </group>
+  );
+}
+
+/**
+ * The main administrative building: the landmark at the head of the axis, with
+ * the deep colonnade and the pyramid-roofed centre tower.
+ */
+function MainBuilding({ position }: { position: [number, number, number] }) {
+  const columns = useMemo(() => Array.from({ length: 15 }, (_, i) => (i - 7) * 3.1), []);
+
+  return (
+    <group position={position}>
+      {/* wings */}
+      <mesh position={[0, 7, 0]} castShadow receiveShadow>
+        <boxGeometry args={[52, 14, 20]} />
+        <meshStandardMaterial color={CAMPUS.sand} roughness={0.92} />
+      </mesh>
+      <mesh position={[0, 14.6, 0]} castShadow>
+        <boxGeometry args={[53, 1.2, 21]} />
+        <meshStandardMaterial color={CAMPUS.sandShade} roughness={0.9} />
+      </mesh>
+
+      {/* centre tower */}
+      <mesh position={[0, 17.5, 2]} castShadow receiveShadow>
+        <boxGeometry args={[18, 7, 16]} />
+        <meshStandardMaterial color={CAMPUS.sand} roughness={0.9} />
+      </mesh>
+      <mesh position={[0, 22.6, 2]} rotation={[0, Math.PI / 4, 0]} castShadow>
+        <coneGeometry args={[13.6, 5.4, 4]} />
+        <meshStandardMaterial color={CAMPUS.terracottaDeep} roughness={0.8} />
+      </mesh>
+      <mesh position={[0, 26.2, 2]} castShadow>
+        <sphereGeometry args={[0.9, 16, 16]} />
+        <meshStandardMaterial
+          color={BRAND.gold}
+          emissive={BRAND.gold}
+          emissiveIntensity={0.7}
+          metalness={0.6}
+          roughness={0.3}
+        />
+      </mesh>
+
+      {/* colonnade across the front */}
+      {columns.map((x) => (
+        <mesh key={x} position={[x, 5.6, 10.6]} castShadow>
+          <cylinderGeometry args={[0.62, 0.72, 11.2, 12]} />
+          <meshStandardMaterial color={CAMPUS.gateStone} roughness={0.85} />
+        </mesh>
+      ))}
+      <mesh position={[0, 11.9, 10.6]} castShadow>
+        <boxGeometry args={[52, 1.6, 3.4]} />
+        <meshStandardMaterial color={CAMPUS.sandShade} roughness={0.9} />
+      </mesh>
+
+      {/* glazing behind the colonnade */}
+      <mesh position={[0, 5.4, 10.05]}>
+        <boxGeometry args={[48, 7.4, 0.3]} />
+        <meshStandardMaterial
+          color={CAMPUS.glass}
+          emissive={CAMPUS.interior}
+          emissiveIntensity={0.32}
+          roughness={0.25}
+          metalness={0.15}
+        />
+      </mesh>
+
+      <Label
+        text="GALGOTIAS UNIVERSITY"
+        position={[0, 13.2, 12.4]}
+        width={30}
+        height={2.1}
+        color={BRAND.maroonDeep}
+        weight={400}
+        spacing={14}
+        serif
+      />
+    </group>
+  );
+}
+
+/** Red sandstone pylon, the pair-wise markers lining the central axis. */
+function Pylon({ position }: { position: [number, number, number] }) {
+  return (
+    <group position={position}>
+      <mesh position={[0, 2.1, 0]} castShadow>
+        <boxGeometry args={[1.5, 4.2, 1.5]} />
+        <meshStandardMaterial color={CAMPUS.terracotta} roughness={0.95} />
+      </mesh>
+      <mesh position={[0, 2.6, 0]}>
+        <boxGeometry args={[0.75, 1.5, 1.6]} />
+        <meshStandardMaterial color={CAMPUS.terracottaDeep} roughness={1} />
+      </mesh>
+      <mesh position={[0, 4.35, 0]} castShadow>
+        <boxGeometry args={[1.9, 0.4, 1.9]} />
+        <meshStandardMaterial color={CAMPUS.sandShade} roughness={0.9} />
+      </mesh>
+    </group>
+  );
+}
+
+/** The trabeated sandstone entrance gate, with the name incised in the beam. */
+function Gate({ position }: { position: [number, number, number] }) {
+  const piers = useMemo(() => [-13, -4.5, 4.5, 13], []);
+
+  return (
+    <group position={position}>
+      {piers.map((x) => (
+        <mesh key={x} position={[x, 5, 0]} castShadow receiveShadow>
+          <boxGeometry args={[2.6, 10, 2.8]} />
+          <meshStandardMaterial color={CAMPUS.gateStone} roughness={0.95} />
+        </mesh>
+      ))}
+      <mesh position={[0, 11.1, 0]} castShadow>
+        <boxGeometry args={[32, 2.6, 4.4]} />
+        <meshStandardMaterial color={CAMPUS.gateStone} roughness={0.95} />
+      </mesh>
+      <Label
+        text="GALGOTIAS UNIVERSITY"
+        position={[0, 11.2, 2.24]}
+        width={26}
+        height={1.7}
+        color="#9c8f75"
+        weight={400}
+        spacing={16}
+        serif
+      />
+    </group>
+  );
+}
+
+function Palm({ position, scale = 1 }: { position: [number, number, number]; scale?: number }) {
+  const fronds = useMemo(() => Array.from({ length: 7 }, (_, i) => (i / 7) * Math.PI * 2), []);
+
+  return (
+    <group position={position} scale={scale}>
+      <mesh position={[0, 2.4, 0]} castShadow>
+        <cylinderGeometry args={[0.16, 0.28, 4.8, 7]} />
+        <meshStandardMaterial color={CAMPUS.trunk} roughness={1} />
+      </mesh>
+      {fronds.map((a, i) => (
+        <mesh
+          key={a}
+          position={[Math.sin(a) * 1.1, 4.9, Math.cos(a) * 1.1]}
+          rotation={[Math.cos(a) * 0.5, -a, -0.55 + Math.sin(a) * 0.25]}
+          castShadow
+        >
+          <boxGeometry args={[2.6, 0.12, 0.75]} />
+          <meshStandardMaterial color={i % 2 ? CAMPUS.foliage : "#4c7d42"} roughness={1} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+/** Clipped shrub, the topiary dotted through the lawns. */
+function Shrub({ position, scale = 1 }: { position: [number, number, number]; scale?: number }) {
+  return (
+    <mesh position={[position[0], 0.75 * scale, position[2]]} scale={scale} castShadow>
+      <sphereGeometry args={[0.85, 10, 8]} />
+      <meshStandardMaterial color={CAMPUS.foliage} roughness={1} />
+    </mesh>
+  );
+}
+
+/** Jet in the axial water channel. */
+function Fountain({ position }: { position: [number, number, number] }) {
+  const jet = useRef<THREE.Mesh>(null);
+
+  useFrame(({ clock }) => {
+    if (!jet.current) return;
+    const t = clock.elapsedTime * 1.6 + position[2];
+    jet.current.scale.y = 1 + Math.sin(t) * 0.22;
+  });
+
+  return (
+    <mesh ref={jet} position={[position[0], 1.1, position[2]]}>
+      <cylinderGeometry args={[0.08, 0.22, 2.2, 8]} />
+      <meshStandardMaterial
+        color="#eaf6fa"
+        transparent
+        opacity={0.62}
+        roughness={0.1}
+        emissive="#cfeaf4"
+        emissiveIntensity={0.35}
+      />
+    </mesh>
+  );
+}
+
+export default function Campus() {
+  const pylons = useMemo<[number, number, number][]>(() => {
+    const out: [number, number, number][] = [];
+    for (let z = 40; z >= 4; z -= 9) {
+      out.push([-9.5, 0, z], [9.5, 0, z]);
+    }
+    return out;
+  }, []);
+
+  const fountains = useMemo<[number, number, number][]>(
+    () => [8, 17, 26, 35].map((z) => [0, 0, z] as [number, number, number]),
+    [],
+  );
+
+  const palms = useMemo<[number, number, number, number][]>(
+    () => [
+      [-16, 0, 44, 1], [16, 0, 44, 1.1], [-16, 0, 30, 0.9], [16, 0, 30, 1],
+      [-16, 0, 16, 1.05], [16, 0, 16, 0.95], [-34, 0, 34, 1.1], [34, 0, 36, 1],
+      [-24, 0, 46, 0.9], [26, 0, 46, 1.05],
+    ],
+    [],
+  );
+
+  const shrubs = useMemo<[number, number, number, number][]>(() => {
+    const out: [number, number, number, number][] = [];
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2;
+      out.push([Math.sin(a) * 6, 0, 50 + Math.cos(a) * 6, 0.9]);
+    }
+    for (let z = 10; z <= 40; z += 6) {
+      out.push([-14, 0, z, 0.7], [14, 0, z, 0.7]);
+    }
+    return out;
+  }, []);
+
+  return (
+    <group>
+      {/* ground and lawns */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-        <planeGeometry args={[400, 400]} />
-        <meshStandardMaterial color="#101a24" roughness={1} />
+        <planeGeometry args={[900, 900]} />
+        <meshStandardMaterial color={CAMPUS.lawnDeep} roughness={1} />
       </mesh>
-      {/* lawn */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 14]} receiveShadow>
-        <planeGeometry args={[26, 22]} />
-        <meshStandardMaterial color="#16412f" roughness={1} />
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[-20, 0.02, 26]} receiveShadow>
+        <planeGeometry args={[24, 52]} />
+        <meshStandardMaterial color={CAMPUS.lawn} roughness={1} />
       </mesh>
-      {/* walkway to C Block */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[16, 0.03, 12]} receiveShadow>
-        <planeGeometry args={[5, 26]} />
-        <meshStandardMaterial color="#2a3340" roughness={0.9} />
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[20, 0.02, 26]} receiveShadow>
+        <planeGeometry args={[24, 52]} />
+        <meshStandardMaterial color={CAMPUS.lawn} roughness={1} />
       </mesh>
 
-      <MainBuilding />
-      <Block position={[-21, 0, 6]} rotation={Math.PI / 9} label="A BLOCK" />
-      <Block position={[21, 0, -4]} rotation={-Math.PI / 9} label="B BLOCK" />
-      <Block position={[18, 0, 19]} rotation={-Math.PI / 14} label="C BLOCK" size={[13, 10, 9]} highlight />
+      {/* the axial plaza running from the gate to the academic blocks */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.04, 24]} receiveShadow>
+        <planeGeometry args={[26, 60]} />
+        <meshStandardMaterial color={CAMPUS.paving} roughness={0.95} />
+      </mesh>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.06, 24]} receiveShadow>
+        <planeGeometry args={[13, 58]} />
+        <meshStandardMaterial color={CAMPUS.pavingDark} roughness={0.95} />
+      </mesh>
 
-      {trees.map((p, i) => <Tree key={i} position={p} />)}
-      {lamps.map((p, i) => <Lamp key={i} position={p} />)}
+      {/* water channel down the middle of the axis */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.09, 24]}>
+        <planeGeometry args={[4.6, 48]} />
+        <meshStandardMaterial
+          color={CAMPUS.water}
+          roughness={0.08}
+          metalness={0.55}
+          emissive="#2f6b7d"
+          emissiveIntensity={0.16}
+        />
+      </mesh>
+
+      {/* roundabout at the gate end */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.08, 50]} receiveShadow>
+        <circleGeometry args={[7.6, 36]} />
+        <meshStandardMaterial color={CAMPUS.lawn} roughness={1} />
+      </mesh>
+
+      <Gate position={[0, 0, 62]} />
+
+      {/* blocks, laid out the way the campus reads from the air */}
+      <MainBuilding position={[0, 0, -26]} />
+
+      <AcademicBlock
+        position={[-31, 0, 16]}
+        rotation={0.14}
+        label="A BLOCK"
+        width={30}
+        depth={17}
+        floors={4}
+      />
+      <AcademicBlock
+        position={[-34, 0, -12]}
+        rotation={0.3}
+        label="B BLOCK"
+        width={26}
+        depth={17}
+        floors={4}
+        vault
+      />
+      <AcademicBlock
+        position={[28, 0, 26]}
+        rotation={-0.3}
+        label="C BLOCK"
+        width={26}
+        depth={16}
+        floors={4}
+        vault
+        highlight
+      />
+      <AcademicBlock
+        position={[34, 0, -10]}
+        rotation={-0.28}
+        label="D BLOCK"
+        width={26}
+        depth={17}
+        floors={4}
+        underConstruction
+      />
+
+      {pylons.map((p, i) => (
+        <Pylon key={i} position={p} />
+      ))}
+      {fountains.map((p, i) => (
+        <Fountain key={i} position={p} />
+      ))}
+      {palms.map(([x, y, z, s], i) => (
+        <Palm key={i} position={[x, y, z]} scale={s} />
+      ))}
+      {shrubs.map(([x, y, z, s], i) => (
+        <Shrub key={i} position={[x, y, z]} scale={s} />
+      ))}
     </group>
   );
 }

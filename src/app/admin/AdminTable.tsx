@@ -8,6 +8,7 @@ export type AdminRow = {
   body: string;
   tag: string;
   mood: string;
+  to_block?: string;
   status: string;
   hearts: number;
   created_at: string;
@@ -15,17 +16,17 @@ export type AdminRow = {
 };
 
 const STATUS_STYLE: Record<string, string> = {
-  approved: "bg-emerald-500/15 text-emerald-300",
-  pending: "bg-amber-500/15 text-amber-300",
-  rejected: "bg-rose-500/15 text-rose-300",
+  approved: "bg-[#3f7d5e]/15 text-[#2f6047]",
+  pending: "bg-gold/20 text-[#8a6f14]",
+  rejected: "bg-maroon/12 text-maroon",
 };
 
 function Field({ label, value }: { label: string; value: unknown }) {
   if (value === null || value === undefined || value === "") return null;
   return (
     <div className="min-w-0">
-      <dt className="text-[10px] uppercase tracking-wider text-white/35">{label}</dt>
-      <dd className="truncate font-mono text-xs text-white/80">{String(value)}</dd>
+      <dt className="text-[10px] uppercase tracking-wider text-muted">{label}</dt>
+      <dd className="truncate font-mono text-xs text-foreground">{String(value)}</dd>
     </div>
   );
 }
@@ -67,22 +68,22 @@ export default function AdminTable({ rows, demo }: { rows: AdminRow[]; demo?: bo
   }
 
   return (
-    <main className="min-h-[100dvh] bg-[#070b12] px-4 py-8 text-white sm:px-8">
+    <main className="min-h-[100dvh] bg-background px-4 py-8 text-foreground sm:px-8">
       <header className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold">C Block admin</h1>
-          <p className="text-sm text-white/40">{rows.length} submissions logged</p>
+          <p className="text-sm text-muted">{rows.length} submissions logged</p>
         </div>
         <button
           onClick={logout}
-          className="rounded-full border border-white/15 px-4 py-2 text-sm text-white/70 hover:bg-white/10"
+          className="rounded-full border border-line px-4 py-2 text-sm text-muted hover:text-foreground"
         >
           Log out
         </button>
       </header>
 
       {demo && (
-        <p className="mb-5 rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+        <p className="mb-5 rounded-xl border border-gold/40 bg-gold/12 px-4 py-3 text-sm text-[#7a6212]">
           Demo mode: no Supabase credentials found, so this data lives in memory
           and disappears on restart. Fill in <code>.env.local</code> to persist.
         </p>
@@ -94,7 +95,7 @@ export default function AdminTable({ rows, demo }: { rows: AdminRow[]; demo?: bo
             key={s}
             onClick={() => setFilter(s)}
             className={`rounded-full px-3.5 py-1.5 text-sm ${
-              filter === s ? "bg-white text-black" : "bg-white/8 text-white/60"
+              filter === s ? "bg-maroon text-[#fff4e6]" : "border border-line bg-surface text-muted"
             }`}
           >
             {s}
@@ -104,7 +105,7 @@ export default function AdminTable({ rows, demo }: { rows: AdminRow[]; demo?: bo
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Search text, IP, city, device..."
-          className="ml-auto w-full rounded-full border border-white/10 bg-white/5 px-4 py-1.5 text-sm focus:outline-none sm:w-72"
+          className="ml-auto w-full rounded-full border border-line bg-surface px-4 py-1.5 text-sm focus:outline-none sm:w-72"
         />
       </div>
 
@@ -113,13 +114,16 @@ export default function AdminTable({ rows, demo }: { rows: AdminRow[]; demo?: bo
           const m = r.meta ?? {};
           const isOpen = open === r.id;
           return (
-            <article key={r.id} className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+            <article key={r.id} className="rounded-2xl border border-line bg-surface p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
-                  <p className="text-[15px] leading-relaxed text-white/90">{r.body}</p>
-                  <p className="mt-2 flex flex-wrap items-center gap-2 text-xs text-white/40">
+                  <p className="text-[15px] leading-relaxed text-foreground">{r.body}</p>
+                  <p className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted">
                     <span className={`rounded px-2 py-0.5 ${STATUS_STYLE[r.status] ?? ""}`}>
                       {r.status}
+                    </span>
+                    <span className="rounded bg-maroon/10 px-2 py-0.5 text-maroon">
+                      to {r.to_block ?? "C"}
                     </span>
                     <span>#{r.tag}</span>
                     <span>{r.mood}</span>
@@ -132,7 +136,7 @@ export default function AdminTable({ rows, demo }: { rows: AdminRow[]; demo?: bo
                   {r.status !== "approved" && (
                     <button
                       onClick={() => setStatus(r.id, "approved")}
-                      className="rounded-lg bg-emerald-500/15 px-3 py-1.5 text-emerald-300 hover:bg-emerald-500/25"
+                      className="rounded-lg bg-[#3f7d5e]/15 px-3 py-1.5 text-[#2f6047] hover:bg-[#3f7d5e]/25"
                     >
                       Approve
                     </button>
@@ -140,20 +144,20 @@ export default function AdminTable({ rows, demo }: { rows: AdminRow[]; demo?: bo
                   {r.status !== "rejected" && (
                     <button
                       onClick={() => setStatus(r.id, "rejected")}
-                      className="rounded-lg bg-amber-500/15 px-3 py-1.5 text-amber-300 hover:bg-amber-500/25"
+                      className="rounded-lg bg-gold/20 px-3 py-1.5 text-[#8a6f14] hover:bg-gold/30"
                     >
                       Hide
                     </button>
                   )}
                   <button
                     onClick={() => remove(r.id)}
-                    className="rounded-lg bg-rose-500/15 px-3 py-1.5 text-rose-300 hover:bg-rose-500/25"
+                    className="rounded-lg bg-maroon/12 px-3 py-1.5 text-maroon hover:bg-maroon/20"
                   >
                     Delete
                   </button>
                   <button
                     onClick={() => setOpen(isOpen ? null : r.id)}
-                    className="rounded-lg bg-white/8 px-3 py-1.5 text-white/70 hover:bg-white/15"
+                    className="rounded-lg border border-line px-3 py-1.5 text-muted hover:text-foreground"
                   >
                     {isOpen ? "Hide origin" : "Origin"}
                   </button>
@@ -161,13 +165,15 @@ export default function AdminTable({ rows, demo }: { rows: AdminRow[]; demo?: bo
               </div>
 
               {isOpen && !Object.keys(m).length && (
-                <p className="mt-4 border-t border-white/10 pt-4 text-sm text-white/40">
+                <p className="mt-4 border-t border-line pt-4 text-sm text-muted">
                   No origin data for this row. Seeded samples carry none.
                 </p>
               )}
 
               {isOpen && Object.keys(m).length > 0 && (
-                <dl className="mt-4 grid grid-cols-2 gap-3 border-t border-white/10 pt-4 sm:grid-cols-4">
+                <dl className="mt-4 grid grid-cols-2 gap-3 border-t border-line pt-4 sm:grid-cols-4">
+                  <Field label="From block" value={m.from_block} />
+                  <Field label="Course" value={m.from_course} />
                   <Field label="IP" value={m.ip} />
                   <Field label="City" value={m.geo_city} />
                   <Field label="Region" value={m.geo_region} />
@@ -177,10 +183,10 @@ export default function AdminTable({ rows, demo }: { rows: AdminRow[]; demo?: bo
                   <Field label="Geo source" value={m.geo_source} />
                   {m.geo_lat != null && m.geo_lon != null && (
                     <div>
-                      <dt className="text-[10px] uppercase tracking-wider text-white/35">Map</dt>
+                      <dt className="text-[10px] uppercase tracking-wider text-muted">Map</dt>
                       <dd>
                         <a
-                          className="font-mono text-xs text-sky-300 underline"
+                          className="font-mono text-xs text-[#2f6b7d] underline"
                           href={`https://www.google.com/maps?q=${m.geo_lat},${m.geo_lon}`}
                           target="_blank"
                           rel="noreferrer"
@@ -214,7 +220,7 @@ export default function AdminTable({ rows, demo }: { rows: AdminRow[]; demo?: bo
             </article>
           );
         })}
-        {!visible.length && <p className="text-white/40">Nothing matches that filter.</p>}
+        {!visible.length && <p className="text-muted">Nothing matches that filter.</p>}
       </div>
     </main>
   );
