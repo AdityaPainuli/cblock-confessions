@@ -45,3 +45,28 @@ export function allowAll(
   // Evaluate all of them so each dimension records the attempt.
   return checks.map((c) => allow(c.key, c.limit, c.windowMs)).every(Boolean);
 }
+
+const MINUTE = 60 * 1000;
+
+/**
+ * The quotas every write goes through. A campus shares very few public
+ * addresses, so the IP limits are deliberately loose and the device limits do
+ * the real work: one browser gets its own budget no matter who else is on the
+ * wifi, and a spoofed header does not escape it.
+ */
+export const QUOTAS = {
+  post: { ip: 40, device: 5, windowMs: 10 * MINUTE },
+  heart: { ip: 600, device: 60, windowMs: MINUTE },
+  report: { ip: 120, device: 10, windowMs: MINUTE },
+} as const;
+
+export type Quota = keyof typeof QUOTAS;
+
+/** Applies a named quota across both the address and the device. */
+export function allowWrite(kind: Quota, ip: string, device: string): boolean {
+  const q = QUOTAS[kind];
+  return allowAll([
+    { key: `${kind}:ip:${ip}`, limit: q.ip, windowMs: q.windowMs },
+    { key: `${kind}:dev:${device}`, limit: q.device, windowMs: q.windowMs },
+  ]);
+}

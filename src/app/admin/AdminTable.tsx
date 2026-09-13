@@ -38,10 +38,12 @@ export default function AdminTable({
   rows,
   demo,
   announcement,
+  network,
 }: {
   rows: AdminRow[];
   demo?: boolean;
   announcement: Announcement | null;
+  network: { ip?: string; gated: boolean; onCampus: boolean };
 }) {
   const router = useRouter();
   const [open, setOpen] = useState<string | null>(null);
@@ -94,6 +96,33 @@ export default function AdminTable({
       </header>
 
       <AnnouncementPanel current={announcement} />
+
+      <section className="mb-5 rounded-2xl border border-line bg-surface p-4">
+        <h2 className="text-sm font-semibold text-foreground">Campus network gate</h2>
+        {network.gated ? (
+          <p className="mt-1 text-sm text-muted">
+            On. Only the ranges in <code>CAMPUS_IP_RANGES</code> can reach the wall.
+            This request came from{" "}
+            <code className="rounded bg-[#fdf7ec] px-1.5 py-0.5 font-mono text-xs text-foreground">
+              {network.ip ?? "unknown"}
+            </code>
+            , which is{" "}
+            <span className={network.onCampus ? "text-[#2f6047]" : "text-maroon"}>
+              {network.onCampus ? "inside" : "outside"}
+            </span>{" "}
+            the allowlist.
+          </p>
+        ) : (
+          <p className="mt-1 text-sm text-muted">
+            Off, so the wall is reachable from anywhere. To close it, open this page
+            on campus wifi, note the address below, and set{" "}
+            <code>CAMPUS_IP_RANGES</code> to the range it belongs to.
+            <code className="mt-2 block rounded-lg bg-[#fdf7ec] px-3 py-2 font-mono text-xs text-foreground">
+              {network.ip ?? "unknown"}
+            </code>
+          </p>
+        )}
+      </section>
 
       {demo && (
         <p className="mb-5 rounded-xl border border-gold/40 bg-gold/12 px-4 py-3 text-sm text-[#7a6212]">

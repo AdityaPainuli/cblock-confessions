@@ -3,7 +3,8 @@ import { headers } from "next/headers";
 import { z } from "zod";
 import { buildMeta, clientIp, geoLookup } from "@/lib/device";
 import { create, listPublic } from "@/lib/data";
-import { allowAll } from "@/lib/ratelimit";
+import { allowWrite } from "@/lib/ratelimit";
+import { isOnCampus } from "@/lib/campus";
 import { TAGS } from "@/lib/types";
 import { ALL_COURSES, BLOCK_IDS, getBlock } from "@/lib/blocks";
 
@@ -22,8 +23,19 @@ const Body = z.object({
   signals: z.record(z.string(), z.unknown()).default({}),
 });
 
+const OFF_CAMPUS = {
+  error: "This wall is only open on the university network.",
+  offCampus: true,
+} as const;
+
 export async function GET(req: Request) {
   const params = new URL(req.url).searchParams;
+
+  // The page gate would be trivial to walk around by calling this directly.
+  if (!isOnCampus(clientIp(await headers()))) {
+    return NextResponse.json(OFF_CAMPUS, { status: 403 });
+  }
+
   try {
     const toBlock = params.get("block") ?? "C";
     if (!getBlock(toBlock)?.receiving) {
@@ -42,22 +54,18 @@ export async function POST(req: Request) {
   const h = await headers();
   const ip = clientIp(h);
 
+  if (!isOnCampus(ip)) return NextResponse.json(OFF_CAMPUS, { status: 403 });
+
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json({ error: "That confession looks malformed." }, { status: 400 });
   }
   const { body, tag, mood, fromBlock, fromCourse, toBlock, signals } = parsed.data;
 
-  // Limited on both the address and the device, so spoofing one header does
-  // not hand the caller a fresh quota.
+  // The whole campus shares a handful of addresses, so the device quota is the
+  // one that bites; the address quota is only there to stop a flood.
   const device = typeof signals.fingerprint === "string" ? signals.fingerprint : "unknown";
-  const window = 10 * 60 * 1000;
-  if (
-    !allowAll([
-      { key: `post:ip:${ip ?? "unknown"}`, limit: 5, windowMs: window },
-      { key: `post:dev:${device}`, limit: 5, windowMs: window },
-    ])
-  ) {
+  if (!allowWrite("post", ip ?? "unknown", device)) {
     return NextResponse.json(
       { error: "Slow down. Try again in a few minutes." },
       { status: 429 },

@@ -216,7 +216,15 @@ function Sheet({
                   Confess to {target?.label ?? "C Block"}
                 </h2>
                 <p className="mt-1 text-sm text-muted">
-                  No login, no name, no way for readers to trace it back to you.
+                  No login, no name, no way for readers to trace it back to you.{" "}
+                  <a
+                    href="/privacy"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="underline underline-offset-2"
+                  >
+                    What this site records
+                  </a>
                 </p>
 
                 <textarea

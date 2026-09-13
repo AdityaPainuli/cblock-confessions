@@ -399,12 +399,22 @@ export default function Experience({
               />
             </div>
 
-            <button
-              onClick={() => setComposing(true)}
-              className="mx-auto mb-[max(1.5rem,env(safe-area-inset-bottom))] min-h-12 rounded-full bg-gradient-to-r from-maroon to-terracotta px-8 font-medium text-[#fff4e6] shadow-[0_16px_44px_-18px_rgba(139,26,43,0.9)] transition active:scale-95"
-            >
-              Confess to {activeWall?.label}
-            </button>
+            <div className="mx-auto mb-[max(1.25rem,env(safe-area-inset-bottom))] flex flex-col items-center gap-2">
+              <button
+                onClick={() => setComposing(true)}
+                className="min-h-12 rounded-full bg-gradient-to-r from-maroon to-terracotta px-8 font-medium text-[#fff4e6] shadow-[0_16px_44px_-18px_rgba(139,26,43,0.9)] transition active:scale-95"
+              >
+                Confess to {activeWall?.label}
+              </button>
+              <a
+                href="/privacy"
+                target="_blank"
+                rel="noreferrer"
+                className="text-[11px] text-muted underline underline-offset-2"
+              >
+                What this site records
+              </a>
+            </div>
           </motion.section>
         )}
       </AnimatePresence>

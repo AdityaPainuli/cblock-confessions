@@ -1,4 +1,7 @@
+import { headers } from "next/headers";
 import { isAdmin } from "@/lib/auth";
+import { campusGateEnabled, isOnCampus } from "@/lib/campus";
+import { clientIp } from "@/lib/device";
 import { getAnnouncement, hasSupabase, listAdmin } from "@/lib/data";
 import LoginForm from "./LoginForm";
 import AdminTable, { type AdminRow } from "./AdminTable";
@@ -21,5 +24,14 @@ export default async function AdminPage() {
     );
   }
 
-  return <AdminTable rows={rows} demo={!hasSupabase()} announcement={announcement} />;
+  const ip = clientIp(await headers());
+
+  return (
+    <AdminTable
+      rows={rows}
+      demo={!hasSupabase()}
+      announcement={announcement}
+      network={{ ip, gated: campusGateEnabled(), onCampus: isOnCampus(ip) }}
+    />
+  );
 }

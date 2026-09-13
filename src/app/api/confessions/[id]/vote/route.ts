@@ -3,7 +3,8 @@ import { headers } from "next/headers";
 import { z } from "zod";
 import { clientIp } from "@/lib/device";
 import { castVote } from "@/lib/data";
-import { allowAll } from "@/lib/ratelimit";
+import { allowWrite } from "@/lib/ratelimit";
+import { isOnCampus } from "@/lib/campus";
 
 export const runtime = "nodejs";
 
@@ -20,22 +21,23 @@ export async function POST(
   const { id } = await params;
   const ip = clientIp(await headers()) ?? "unknown";
 
+  if (!isOnCampus(ip)) {
+    return NextResponse.json(
+      { error: "This wall is only open on the university network." },
+      { status: 403 },
+    );
+  }
+
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json({ error: "Bad vote." }, { status: 400 });
   }
   const { kind, device } = parsed.data;
 
-  // castVote is the real one-vote-per-device guard; this only stops a flood,
-  // and counts the device as well as the address so a spoofed header is not
-  // enough to get a fresh quota.
-  const cap = kind === "report" ? 20 : 120;
-  if (
-    !allowAll([
-      { key: `vote:ip:${ip}`, limit: cap, windowMs: 60 * 1000 },
-      { key: `vote:dev:${device}`, limit: cap, windowMs: 60 * 1000 },
-    ])
-  ) {
+  // castVote is the real one-vote-per-device guard; this only stops a flood.
+  // Reports are capped far tighter than hearts, since a handful of them pulls
+  // a confession off the wall.
+  if (!allowWrite(kind, ip, device)) {
     return NextResponse.json({ error: "Too fast." }, { status: 429 });
   }
 

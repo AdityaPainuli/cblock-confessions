@@ -121,6 +121,37 @@ Push to GitHub, import into Vercel, paste the same four environment variables.
 On Vercel the edge geo headers are used for location, so no external lookup is
 needed.
 
+## Campus network gate
+
+The wall is meant for students on campus, and a browser cannot read the wifi
+SSID, so "are you on campus" is answered by where the request comes from:
+traffic on the university network leaves through the university's own public
+addresses.
+
+Put those in `CAMPUS_IP_RANGES` (comma-separated CIDRs, IPv4 and IPv6) and only
+they get in — reading as well as posting, enforced on the page **and** on every
+API route, since a page-only check would be walked around by calling the
+endpoints directly. Leave it empty and the gate is off.
+
+To find the range: open `/admin` while on campus wifi. The network panel shows
+the address the site sees; set the range it belongs to.
+
+What this buys, and what it does not:
+
+- it keeps the wall off the open internet, which is the point;
+- campus wifi passes, **campus mobile data does not** — that is the carrier's
+  network, not the university's;
+- a VPN back onto the campus network passes, and a VPN off it fails;
+- anyone who can reach the university network can reach the wall, so this is a
+  fence, not an identity check.
+
+`/privacy` stays reachable from anywhere, so the notice can be read before
+connecting.
+
+The address matcher is pure and covered by `npm test` — 27 cases including
+non-byte-aligned prefixes, IPv4-mapped IPv6, family crossing and malformed
+input.
+
 ## Announcements
 
 The admin panel can put a banner on the site for an event, a deadline or
@@ -147,8 +178,17 @@ At **3 reports** a confession flips to `pending` and leaves the wall until a
 moderator looks at it. That threshold is `REPORT_THRESHOLD` in `src/lib/data.ts`
 and the `cast_vote` function in the schema.
 
-Posting is rate limited on the address **and** the device together, so spoofing
-`X-Forwarded-For` does not hand the caller a fresh quota.
+Writes are rate limited on the address **and** the device together, so spoofing
+`X-Forwarded-For` does not hand the caller a fresh quota. A campus shares very
+few public addresses, so the address limits are deliberately loose and the
+device limits do the real work — one browser gets its own budget no matter who
+else is on the wifi. Quotas live in `QUOTAS` in `src/lib/ratelimit.ts`:
+
+| | per device | per address | window |
+|---|---|---|---|
+| post | 5 | 40 | 10 min |
+| heart | 60 | 600 | 1 min |
+| report | 10 | 120 | 1 min |
 
 ## Data collected
 
@@ -159,5 +199,5 @@ language, CPU/RAM, GPU string, a derived device fingerprint, and IP-derived
 city/region/country/coordinates. That table has **zero** RLS policies, so the
 public anon key cannot read it; only the server-side service-role key can.
 
-This is personal data under India's DPDP Act 2023. Publish a privacy notice
-before the site goes public.
+This is personal data under India's DPDP Act 2023. The notice lives at
+`/privacy` and is linked from the compose sheet and the wall.
