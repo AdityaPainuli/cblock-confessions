@@ -1,29 +1,48 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { Canvas, useFrame, useLoader, useThree } from "@react-three/fiber";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import * as THREE from "three";
 import Campus from "./Campus";
+import type { BlockId } from "@/lib/blocks";
 import { QUALITY, type Tier } from "@/lib/useDeviceTier";
 
-export type Stage = "campus" | "block";
+export type Stage = "campus" | "blocks" | "wall";
 
-const VIEWS: Record<Stage, { pos: THREE.Vector3; look: THREE.Vector3 }> = {
+type View = { pos: THREE.Vector3; look: THREE.Vector3 };
+
+/** Drifting overview, then a high framing that shows every block at once. */
+const VIEWS: Record<"campus" | "blocks", View> = {
   campus: { pos: new THREE.Vector3(16, 30, 92), look: new THREE.Vector3(2, 9, 6) },
-  block: { pos: new THREE.Vector3(19, 8, 63), look: new THREE.Vector3(26, 7, 34) },
+  blocks: { pos: new THREE.Vector3(0, 52, 104), look: new THREE.Vector3(0, 4, 4) },
+};
+
+/** Standing at each block's entrance, derived from its placement in Campus. */
+const WALL_VIEWS: Record<BlockId, View> = {
+  A: { pos: new THREE.Vector3(-26, 9, 50), look: new THREE.Vector3(-30, 7, 25) },
+  B: { pos: new THREE.Vector3(-24, 9, 20), look: new THREE.Vector3(-32, 7, -4) },
+  C: { pos: new THREE.Vector3(19, 8, 56), look: new THREE.Vector3(26, 7, 34) },
+  D: { pos: new THREE.Vector3(25, 9, 22), look: new THREE.Vector3(32, 7, -2) },
 };
 
 // Phones are portrait, so the campus needs to be further away to fit the frame.
 const PORTRAIT_PULLBACK = 1.42;
 
-function CameraRig({ stage, active }: { stage: Stage; active: boolean }) {
+function CameraRig({
+  stage,
+  block,
+  active,
+}: {
+  stage: Stage;
+  block: BlockId;
+  active: boolean;
+}) {
   const { camera, size } = useThree();
   const look = useMemo(() => VIEWS.campus.look.clone(), []);
-  const settled = useRef(false);
 
   useFrame((state, delta) => {
-    const view = VIEWS[stage];
+    const view = stage === "wall" ? WALL_VIEWS[block] : VIEWS[stage];
     const t = 1 - Math.pow(0.0015, delta); // frame-rate independent damping
     const portrait = size.height > size.width;
 
@@ -41,7 +60,6 @@ function CameraRig({ stage, active }: { stage: Stage; active: boolean }) {
     camera.position.lerp(target, t);
     look.lerp(view.look, t);
     camera.lookAt(look);
-    settled.current = camera.position.distanceToSquared(target) < 0.01;
   });
 
   return null;
@@ -92,7 +110,15 @@ function Sky() {
   );
 }
 
-export default function CampusScene({ stage, tier }: { stage: Stage; tier: Tier }) {
+export default function CampusScene({
+  stage,
+  block,
+  tier,
+}: {
+  stage: Stage;
+  block: BlockId;
+  tier: Tier;
+}) {
   const model = useCustomModel();
   const q = QUALITY[tier];
 
@@ -108,6 +134,8 @@ export default function CampusScene({ stage, tier }: { stage: Stage; tier: Tier 
     return () => document.removeEventListener("visibilitychange", onVis);
   }, []);
 
+  // Only the drifting overview needs a live loop; the other stages settle and
+  // then hold, so a phone is not redrawing a static frame forever.
   const active = visible && stage === "campus";
 
   return (
@@ -142,15 +170,15 @@ export default function CampusScene({ stage, tier }: { stage: Stage; tier: Tier 
         {model ? <GltfCampus url={model} /> : <Campus quality={q} />}
       </Suspense>
 
-      <CameraRig stage={stage} active={active} />
+      <CameraRig stage={stage} block={block} active={active} />
       {/* One last frame after the camera settles, so "demand" leaves it correct. */}
-      <Settle stage={stage} />
+      <Settle stage={`${stage}:${block}`} />
     </Canvas>
   );
 }
 
 /** Drives a few frames after a stage change so the paused canvas lands settled. */
-function Settle({ stage }: { stage: Stage }) {
+function Settle({ stage }: { stage: string }) {
   const { invalidate } = useThree();
   useEffect(() => {
     let raf = 0;

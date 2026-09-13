@@ -621,6 +621,7 @@ export default function Campus({ quality }: { quality: Quality }) {
         width={30}
         depth={17}
         floors={4}
+        underConstruction
       />
       <AcademicBlock
         position={[-34, 0, -12]}
@@ -629,7 +630,7 @@ export default function Campus({ quality }: { quality: Quality }) {
         width={26}
         depth={17}
         floors={4}
-        vault
+        underConstruction
       />
       <AcademicBlock
         position={[28, 0, 26]}

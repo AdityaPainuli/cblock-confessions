@@ -7,7 +7,7 @@ import ComposeSheet from "./ComposeSheet";
 import ConfessionDeck from "./ConfessionDeck";
 import CampusFallback from "./CampusFallback";
 import { useDeviceTier } from "@/lib/useDeviceTier";
-import { BLOCKS, type BlockId } from "@/lib/blocks";
+import { BLOCKS, getBlock, type BlockId } from "@/lib/blocks";
 import { TAGS, type Confession } from "@/lib/types";
 import type { Stage } from "./three/CampusScene";
 
@@ -26,33 +26,31 @@ export default function Experience({
 }) {
   const tier = useDeviceTier();
   const [stage, setStage] = useState<Stage>("campus");
-  const [showFeed, setShowFeed] = useState(false);
+  const [wall, setWall] = useState<BlockId>("C");
+  const [showPanel, setShowPanel] = useState(false);
+
   const [items, setItems] = useState<Confession[]>(initial);
   const [cursor, setCursor] = useState<string | null>(initialCursor);
   const [tag, setTag] = useState<string>("all");
-  const [wall, setWall] = useState<BlockId>("C");
   const [sort, setSort] = useState<Sort>("latest");
   const [composing, setComposing] = useState(false);
 
   const request = useRef(0);
   const loadingMore = useRef(false);
 
-  /** Replaces the feed. Used whenever a filter changes. */
-  const reload = useCallback(
-    async (next: { tag: string; wall: BlockId; sort: Sort }) => {
-      const ticket = ++request.current;
-      const q = new URLSearchParams({ block: next.wall, sort: next.sort });
-      if (next.tag !== "all") q.set("tag", next.tag);
+  /** Replaces the feed. Used whenever a filter or the chosen wall changes. */
+  const reload = useCallback(async (next: { tag: string; wall: BlockId; sort: Sort }) => {
+    const ticket = ++request.current;
+    const q = new URLSearchParams({ block: next.wall, sort: next.sort });
+    if (next.tag !== "all") q.set("tag", next.tag);
 
-      const res = await fetch(`/api/confessions?${q}`, { cache: "no-store" });
-      if (!res.ok || ticket !== request.current) return;
+    const res = await fetch(`/api/confessions?${q}`, { cache: "no-store" });
+    if (!res.ok || ticket !== request.current) return;
 
-      const data = await res.json();
-      setItems(data.confessions ?? []);
-      setCursor(data.nextCursor ?? null);
-    },
-    [],
-  );
+    const data = await res.json();
+    setItems(data.confessions ?? []);
+    setCursor(data.nextCursor ?? null);
+  }, []);
 
   /** Appends the next page. Called by the deck as the reader nears the end. */
   const loadMore = useCallback(async () => {
@@ -80,47 +78,67 @@ export default function Experience({
   }, [cursor, wall, sort, tag]);
 
   const pick = useCallback(
-    (next: Partial<{ tag: string; wall: BlockId; sort: Sort }>) => {
-      const merged = { tag, wall, sort, ...next };
+    (next: Partial<{ tag: string; sort: Sort }>) => {
+      const merged = { tag, sort, ...next };
       setTag(merged.tag);
-      setWall(merged.wall);
       setSort(merged.sort);
-      void reload(merged).catch(() => {});
+      void reload({ ...merged, wall }).catch(() => {});
     },
-    [tag, wall, sort, reload],
+    [tag, sort, wall, reload],
   );
 
-  const enter = useCallback(() => {
-    setStage((s) => (s === "block" ? s : "block"));
-    setTimeout(() => setShowFeed(true), 1000);
+  /** Campus overview -> the block chooser. */
+  const toBlocks = useCallback(() => {
+    setShowPanel(false);
+    setStage("blocks");
+    setTimeout(() => setShowPanel(true), 850);
   }, []);
 
-  const exit = useCallback(() => {
-    setShowFeed(false);
-    setStage("campus");
-  }, []);
+  /** Block chooser -> that block's wall. */
+  const openWall = useCallback(
+    (id: BlockId) => {
+      if (!getBlock(id)?.receiving) return;
+      setShowPanel(false);
+      setWall(id);
+      setStage("wall");
+      void reload({ tag, sort, wall: id }).catch(() => {});
+      setTimeout(() => setShowPanel(true), 950);
+    },
+    [reload, tag, sort],
+  );
 
-  // Wheel and keyboard get you in too, not just the swipe.
+  const back = useCallback(() => {
+    setShowPanel(false);
+    if (stage === "wall") {
+      setStage("blocks");
+      setTimeout(() => setShowPanel(true), 850);
+    } else {
+      setStage("campus");
+    }
+  }, [stage]);
+
+  // Wheel and keyboard get you off the landing too, not just the swipe.
   useEffect(() => {
     if (stage !== "campus") return;
-    const onWheel = (e: WheelEvent) => e.deltaY > 24 && enter();
+    const onWheel = (e: WheelEvent) => e.deltaY > 24 && toBlocks();
     const onKey = (e: KeyboardEvent) =>
-      (e.key === "ArrowUp" || e.key === "Enter") && enter();
+      (e.key === "ArrowUp" || e.key === "Enter") && toBlocks();
     window.addEventListener("wheel", onWheel, { passive: true });
     window.addEventListener("keydown", onKey);
     return () => {
       window.removeEventListener("wheel", onWheel);
       window.removeEventListener("keydown", onKey);
     };
-  }, [stage, enter]);
+  }, [stage, toBlocks]);
 
-  const activeWall = BLOCKS.find((b) => b.id === wall);
+  const activeWall = getBlock(wall);
+  const veiled = showPanel && stage !== "campus";
 
   return (
     <main className="relative h-[100dvh] w-full overflow-hidden bg-background text-foreground">
       <div className="absolute inset-0">
         {tier === "high" || tier === "medium" ? (
-          <CampusScene stage={stage} tier={tier} />
+          <CampusScene stage={stage} block={wall} tier={tier} />
         ) : tier === "low" ? (
           <CampusFallback stage={stage} />
         ) : null}
@@ -128,9 +146,12 @@ export default function Experience({
 
       <div
         className="pointer-events-none absolute inset-0 bg-[#f6ecdc] transition-opacity duration-700"
-        style={{ opacity: showFeed ? 0.74 : 0 }}
+        style={{ opacity: veiled ? (stage === "wall" ? 0.74 : 0.58) : 0 }}
       />
 
+      {/* ---------------------------------------------------------------- */}
+      {/* Landing: the university first, the wall second.                   */}
+      {/* ---------------------------------------------------------------- */}
       <AnimatePresence>
         {stage === "campus" && (
           <motion.div
@@ -150,7 +171,7 @@ export default function Experience({
               dragConstraints={{ top: 0, bottom: 0 }}
               dragElastic={0.2}
               dragMomentum={false}
-              onDragEnd={(_, info) => info.offset.y < -60 && enter()}
+              onDragEnd={(_, info) => info.offset.y < -60 && toBlocks()}
             />
 
             <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[62%] bg-gradient-to-t from-[#f4ece0] via-[#f4ece0]/86 to-transparent" />
@@ -161,12 +182,10 @@ export default function Experience({
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.3, duration: 0.7 }}
               >
-                <p className="text-[11px] uppercase tracking-[0.36em] text-muted sm:text-xs sm:tracking-[0.42em]">
-                  Galgotias University
-                </p>
-                <h1 className="mt-3 text-[clamp(2.5rem,13vw,4.5rem)] font-bold leading-[0.95] tracking-tight">
-                  C BLOCK
-                  <span className="block bg-gradient-to-r from-maroon to-terracotta bg-clip-text text-transparent">
+                <h1 className="text-[clamp(1.9rem,8.5vw,3.6rem)] font-bold leading-[1.02] tracking-tight">
+                  GALGOTIAS
+                  <span className="block">UNIVERSITY</span>
+                  <span className="mt-1 block bg-gradient-to-r from-maroon to-terracotta bg-clip-text text-[clamp(1.35rem,6vw,2.5rem)] tracking-[0.16em] text-transparent">
                     CONFESSIONS
                   </span>
                 </h1>
@@ -175,7 +194,7 @@ export default function Experience({
                 </p>
 
                 <button
-                  onClick={enter}
+                  onClick={toBlocks}
                   className="pointer-events-auto mt-8 min-h-12 rounded-full border border-line bg-surface/85 px-7 py-3 text-sm uppercase tracking-[0.2em] text-maroon-deep shadow-sm backdrop-blur transition active:scale-95 hover:bg-surface"
                 >
                   Swipe up to enter
@@ -194,25 +213,111 @@ export default function Experience({
         )}
       </AnimatePresence>
 
+      {/* ---------------------------------------------------------------- */}
+      {/* Block chooser. Only C is finished; the rest are building sites.   */}
+      {/* ---------------------------------------------------------------- */}
       <AnimatePresence>
-        {showFeed && (
+        {stage === "blocks" && showPanel && (
           <motion.section
-            key="feed"
+            key="blocks"
+            className="absolute inset-0 flex flex-col"
+            initial={{ opacity: 0, y: 28 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 28 }}
+            transition={{ duration: 0.45 }}
+          >
+            <header className="px-4 pt-[max(1rem,env(safe-area-inset-top))]">
+              <button
+                onClick={back}
+                className="min-h-11 rounded-full border border-line bg-surface/80 px-4 text-sm text-foreground backdrop-blur transition active:scale-95"
+              >
+                {"←"} campus
+              </button>
+            </header>
+
+            <div className="flex flex-1 flex-col justify-center px-5 pb-[max(2rem,env(safe-area-inset-bottom))]">
+              <p className="text-center text-[11px] uppercase tracking-[0.34em] text-muted">
+                Galgotias University
+              </p>
+              <h2 className="mt-2 text-center text-[clamp(1.6rem,7vw,2.4rem)] font-bold leading-tight">
+                Pick a block
+              </h2>
+              <p className="mx-auto mt-2 max-w-sm text-center text-sm text-muted">
+                Only C Block is open so far. The rest of the campus is still going up.
+              </p>
+
+              <div className="mx-auto mt-7 grid w-full max-w-md grid-cols-2 gap-3">
+                {BLOCKS.map((b, i) => (
+                  <motion.button
+                    key={b.id}
+                    onClick={() => openWall(b.id)}
+                    disabled={!b.receiving}
+                    initial={{ opacity: 0, y: 16 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.06 * i, duration: 0.35 }}
+                    className={`relative flex min-h-[8rem] flex-col overflow-hidden rounded-3xl border p-4 text-left transition ${
+                      b.receiving
+                        ? "border-maroon/35 bg-surface shadow-[0_18px_44px_-28px_rgba(139,26,43,0.85)] active:scale-[0.98]"
+                        : "cursor-not-allowed border-dashed border-line bg-surface/55"
+                    }`}
+                  >
+                    <span
+                      className={`block text-lg font-semibold ${
+                        b.receiving ? "text-foreground" : "text-muted"
+                      }`}
+                    >
+                      {b.label}
+                    </span>
+
+                    {b.receiving ? (
+                      <>
+                        <span className="mt-1 block flex-1 text-xs leading-relaxed text-muted">
+                          {b.courses.join(" · ")}
+                        </span>
+                        <span className="mt-3 inline-flex w-fit items-center gap-1.5 rounded-full bg-maroon px-3 py-1 text-xs font-medium text-[#fff4e6]">
+                          Open · read &amp; confess
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="mt-1 block flex-1 text-xs text-muted">
+                          Courses being mapped
+                        </span>
+                        <span className="mt-3 inline-flex w-fit items-center gap-1.5 text-xs uppercase tracking-wide text-muted/80">
+                          {"🚧"} {b.note}
+                        </span>
+                      </>
+                    )}
+                  </motion.button>
+                ))}
+              </div>
+            </div>
+          </motion.section>
+        )}
+      </AnimatePresence>
+
+      {/* ---------------------------------------------------------------- */}
+      {/* The wall itself.                                                  */}
+      {/* ---------------------------------------------------------------- */}
+      <AnimatePresence>
+        {stage === "wall" && showPanel && (
+          <motion.section
+            key="wall"
             className="absolute inset-0 flex flex-col"
             initial={{ opacity: 0, y: 32 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 32 }}
             transition={{ duration: 0.45 }}
           >
-            <header className="flex items-center justify-between px-4 pt-[max(1rem,env(safe-area-inset-top))]">
+            <header className="flex items-center justify-between gap-3 px-4 pt-[max(1rem,env(safe-area-inset-top))]">
               <button
-                onClick={exit}
-                className="min-h-11 rounded-full border border-line bg-surface/80 px-4 text-sm text-foreground backdrop-blur transition active:scale-95"
+                onClick={back}
+                className="min-h-11 shrink-0 rounded-full border border-line bg-surface/80 px-4 text-sm text-foreground backdrop-blur transition active:scale-95"
               >
-                {"←"} campus
+                {"←"} {activeWall?.label}
               </button>
 
-              <div className="flex rounded-full border border-line bg-surface/80 p-0.5 backdrop-blur">
+              <div className="flex shrink-0 rounded-full border border-line bg-surface/80 p-0.5 backdrop-blur">
                 {(["latest", "top"] as Sort[]).map((s) => (
                   <button
                     key={s}
@@ -227,30 +332,7 @@ export default function Experience({
               </div>
             </header>
 
-            <div className="no-scrollbar mt-3 flex gap-2 overflow-x-auto px-4">
-              {BLOCKS.map((b) => (
-                <button
-                  key={b.id}
-                  onClick={() => b.receiving && pick({ wall: b.id })}
-                  disabled={!b.receiving}
-                  title={b.receiving ? undefined : b.note}
-                  className={`min-h-10 shrink-0 rounded-full px-3.5 text-sm transition ${
-                    wall === b.id
-                      ? "bg-maroon text-[#fff4e6]"
-                      : b.receiving
-                        ? "border border-line bg-surface/80 text-muted backdrop-blur"
-                        : "cursor-not-allowed border border-dashed border-line text-muted/60"
-                  }`}
-                >
-                  {b.label}
-                  {!b.receiving && (
-                    <span className="ml-1.5 text-[11px] uppercase tracking-wide">{b.note}</span>
-                  )}
-                </button>
-              ))}
-            </div>
-
-            <div className="no-scrollbar mt-2 flex gap-2 overflow-x-auto px-4 pb-1">
+            <div className="no-scrollbar mt-3 flex gap-2 overflow-x-auto px-4 pb-1">
               {["all", ...TAGS].map((t) => (
                 <button
                   key={t}
@@ -274,7 +356,7 @@ export default function Experience({
               onClick={() => setComposing(true)}
               className="mx-auto mb-[max(1.5rem,env(safe-area-inset-bottom))] min-h-12 rounded-full bg-gradient-to-r from-maroon to-terracotta px-8 font-medium text-[#fff4e6] shadow-[0_16px_44px_-18px_rgba(139,26,43,0.9)] transition active:scale-95"
             >
-              Confess to {activeWall?.label ?? "C Block"}
+              Confess to {activeWall?.label}
             </button>
           </motion.section>
         )}

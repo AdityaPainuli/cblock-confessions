@@ -8,13 +8,14 @@ import type { Stage } from "./three/CampusScene";
  * and red pylons, drawn once. Shown on low-end phones and for reduced motion.
  */
 export default function CampusFallback({ stage }: { stage: Stage }) {
-  const entered = stage === "block";
+  // Pull in a little at the chooser, then all the way in at the wall.
+  const zoom = stage === "wall" ? "scale(2.4) translateX(-16%)" : stage === "blocks" ? "scale(1.3)" : "scale(1)";
 
   return (
     <div className="haze absolute inset-0 overflow-hidden">
       <div
         className="absolute inset-x-0 bottom-0 origin-bottom transition-transform duration-[1400ms] ease-out"
-        style={{ transform: entered ? "scale(2.4) translateX(-16%)" : "scale(1)" }}
+        style={{ transform: zoom }}
       >
         <svg viewBox="0 0 400 220" className="w-full" aria-hidden>
           {/* ground and axial plaza */}

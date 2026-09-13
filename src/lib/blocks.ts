@@ -25,8 +25,8 @@ export type Block = {
 };
 
 export const BLOCKS: Block[] = [
-  { id: "A", label: "A Block", receiving: false, note: "Coming soon", courses: [] },
-  { id: "B", label: "B Block", receiving: false, note: "Coming soon", courses: [] },
+  { id: "A", label: "A Block", receiving: false, note: "Under construction", courses: [] },
+  { id: "B", label: "B Block", receiving: false, note: "Under construction", courses: [] },
   {
     id: "C",
     label: "C Block",

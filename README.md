@@ -5,19 +5,24 @@ Next.js 16 + Supabase + react-three-fiber + Framer Motion.
 
 ## How it works
 
-1. **Campus stage.** A 3D Galgotias campus renders in WebGL, modelled from the
+1. **Landing.** The university leads, not one block: *Galgotias University
+   Confessions* over the campus.
+2. **Campus stage.** A 3D Galgotias campus renders in WebGL, modelled from the
    university's own photography: cream sandstone blocks with ribbon glazing and
    red sandstone stair towers, barrel-vault roofs, the colonnaded main building
    with its pyramid roof, the axial water channel lined with red pylons, and the
    trabeated sandstone entrance gate.
-2. **Swipe up** (or scroll, arrow-up, or the button) and the camera flies to the
-   C Block entrance.
-3. **The wall.** Confessions arrive as a swipeable card deck. Right swipe
+3. **Swipe up** (or scroll, arrow-up, or the button) and the camera pulls back
+   to frame every block.
+4. **Pick a block.** Four cards. C Block is open; A, B and D are under
+   construction and cannot be selected. Choosing one flies the camera to that
+   block's entrance.
+5. **The wall.** Confessions arrive as a swipeable card deck. Right swipe
    hearts it, left swipe skips, the flag reports it. Sort by latest or top,
    filter by tag, and the next page loads before you reach the end.
-4. **Confess.** Two steps: say which block you study in (and your course, if we
+6. **Confess.** Two steps: say which block you study in (and your course, if we
    have mapped that block yet), then write. No account needed.
-5. **/admin.** Password-gated moderation plus the submission log.
+7. **/admin.** Password-gated moderation plus the submission log.
 
 ## Performance
 
@@ -52,8 +57,10 @@ no horizontal page overflow at any width.
 ## Blocks
 
 Every block can **send** a confession. Only blocks marked `receiving` can
-**hold** one, and right now that is C Block alone; A and B show *coming soon*
-and D shows *under construction*, on the campus model and in the UI alike.
+**hold** one, and right now that is C Block alone. A, B and D read *under
+construction* everywhere: greyed out in the chooser, and wrapped in scaffolding
+with a crane on the campus model itself. C Block is the only finished building
+on the site, which is the point.
 
 The registry lives in one file, `src/lib/blocks.ts`. To open another wall, flip
 `receiving` to `true` and fill in that block's courses:
