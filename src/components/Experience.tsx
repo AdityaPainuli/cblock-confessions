@@ -9,6 +9,7 @@ import CampusFallback from "./CampusFallback";
 import { useDeviceTier } from "@/lib/useDeviceTier";
 import { BLOCKS, getBlock, type BlockId } from "@/lib/blocks";
 import { TAGS, type Confession } from "@/lib/types";
+import { FLIGHT_MS } from "@/lib/flight";
 import type { Stage } from "./three/CampusScene";
 
 // Only pulled when the device can actually run it, which keeps three.js off
@@ -87,35 +88,42 @@ export default function Experience({
     [tag, sort, wall, reload],
   );
 
-  /** Campus overview -> the block chooser. */
-  const toBlocks = useCallback(() => {
+  /**
+   * Moves to a stage and holds the UI back until the camera has finished
+   * flying, so the move is something you watch rather than something hidden
+   * behind a panel fading in over it.
+   */
+  const panelTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const goTo = useCallback((next: Stage) => {
+    if (panelTimer.current) clearTimeout(panelTimer.current);
     setShowPanel(false);
-    setStage("blocks");
-    setTimeout(() => setShowPanel(true), 850);
+    setStage(next);
+    if (next === "campus") return;
+    panelTimer.current = setTimeout(() => setShowPanel(true), FLIGHT_MS[next]);
   }, []);
+
+  useEffect(() => () => {
+    if (panelTimer.current) clearTimeout(panelTimer.current);
+  }, []);
+
+  /** Campus overview -> the block chooser. */
+  const toBlocks = useCallback(() => goTo("blocks"), [goTo]);
 
   /** Block chooser -> that block's wall. */
   const openWall = useCallback(
     (id: BlockId) => {
       if (!getBlock(id)?.receiving) return;
-      setShowPanel(false);
       setWall(id);
-      setStage("wall");
+      goTo("wall");
+      // Fetch during the flight, so the deck is ready the moment it lands.
       void reload({ tag, sort, wall: id }).catch(() => {});
-      setTimeout(() => setShowPanel(true), 950);
     },
-    [reload, tag, sort],
+    [goTo, reload, tag, sort],
   );
 
   const back = useCallback(() => {
-    setShowPanel(false);
-    if (stage === "wall") {
-      setStage("blocks");
-      setTimeout(() => setShowPanel(true), 850);
-    } else {
-      setStage("campus");
-    }
-  }, [stage]);
+    goTo(stage === "wall" ? "blocks" : "campus");
+  }, [goTo, stage]);
 
   // Wheel and keyboard get you off the landing too, not just the swipe.
   useEffect(() => {
@@ -133,6 +141,7 @@ export default function Experience({
 
   const activeWall = getBlock(wall);
   const veiled = showPanel && stage !== "campus";
+  const flying = stage !== "campus" && !showPanel;
 
   return (
     <main className="relative h-[100dvh] w-full overflow-hidden bg-background text-foreground">
@@ -148,6 +157,24 @@ export default function Experience({
         className="pointer-events-none absolute inset-0 bg-[#f6ecdc] transition-opacity duration-700"
         style={{ opacity: veiled ? (stage === "wall" ? 0.74 : 0.58) : 0 }}
       />
+
+      {/* Names the destination while the camera is still on its way there. */}
+      <AnimatePresence>
+        {flying && (
+          <motion.div
+            key="flying"
+            className="pointer-events-none absolute inset-x-0 top-[38%] z-20 text-center"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.35 }}
+          >
+            <span className="rounded-full bg-surface/85 px-5 py-2 text-xs uppercase tracking-[0.3em] text-maroon-deep shadow-sm backdrop-blur">
+              {stage === "wall" ? `Entering ${activeWall?.label}` : "Galgotias University"}
+            </span>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ---------------------------------------------------------------- */}
       {/* Landing: the university first, the wall second.                   */}

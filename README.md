@@ -12,17 +12,29 @@ Next.js 16 + Supabase + react-three-fiber + Framer Motion.
    red sandstone stair towers, barrel-vault roofs, the colonnaded main building
    with its pyramid roof, the axial water channel lined with red pylons, and the
    trabeated sandstone entrance gate.
-3. **Swipe up** (or scroll, arrow-up, or the button) and the camera pulls back
-   to frame every block.
+3. **Swipe up** (or scroll, arrow-up, or the button) and the camera flies up
+   and back into a near-plan view of the whole campus.
 4. **Pick a block.** Four cards. C Block is open; A, B and D are under
-   construction and cannot be selected. Choosing one flies the camera to that
-   block's entrance.
+   construction and cannot be selected. Choosing one flies the camera down to
+   that building's entrance, and the panel waits for it to land.
 5. **The wall.** Confessions arrive as a swipeable card deck. Right swipe
    hearts it, left swipe skips, the flag reports it. Sort by latest or top,
    filter by tag, and the next page loads before you reach the end.
 6. **Confess.** Two steps: say which block you study in (and your course, if we
    have mapped that block yet), then write. No account needed.
 7. **/admin.** Password-gated moderation plus the submission log.
+
+## Camera flights
+
+Moves between stages are flown, not cut. Each one starts from wherever the
+camera actually is, eases in and out, and arcs upward through the middle so it
+sweeps over the campus rather than clipping through a building. The UI holds
+back until the flight lands (`FLIGHT_MS` in `src/lib/flight.ts`, shared by the
+scene and the components that wait on it), and a caption names the destination
+while the camera is still on its way.
+
+Every block already has its own entrance view, so opening A, B or D later needs
+no camera work.
 
 ## Performance
 
