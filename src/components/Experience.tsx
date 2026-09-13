@@ -80,6 +80,13 @@ export default function Experience({
     }
   }, [cursor, wall, sort, tag]);
 
+  /** Counts the heart locally so the number moves the instant it is tapped. */
+  const bumpHearts = useCallback((id: string) => {
+    setItems((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, hearts: c.hearts + 1 } : c)),
+    );
+  }, []);
+
   const pick = useCallback(
     (next: Partial<{ tag: string; sort: Sort }>) => {
       const merged = { tag, sort, ...next };
@@ -384,7 +391,12 @@ export default function Experience({
             </div>
 
             <div className="flex flex-1 items-center justify-center px-4 pb-20">
-              <ConfessionDeck items={items} onNeedMore={loadMore} exhausted={!cursor} />
+              <ConfessionDeck
+                items={items}
+                onHeart={bumpHearts}
+                onNeedMore={loadMore}
+                exhausted={!cursor}
+              />
             </div>
 
             <button

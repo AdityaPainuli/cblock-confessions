@@ -59,6 +59,22 @@ input {
   scrollbar-width: none;
 }
 
+/* The heart that bursts when a confession is liked. */
+@keyframes pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  35% {
+    opacity: 0.95;
+    transform: scale(1.15);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.6);
+  }
+}
+
 /* Warm haze for the non-WebGL campus. */
 .haze {
   background:

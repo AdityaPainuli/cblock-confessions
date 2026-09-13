@@ -22,11 +22,14 @@ function sizeFor(length: number) {
 
 function ConfessionCard({
   c,
-  alreadyHearted,
+  hearted,
+  celebrating,
   reported,
 }: {
   c: Confession;
-  alreadyHearted?: boolean;
+  hearted?: boolean;
+  /** Plays the burst for the beat between tapping heart and the card leaving. */
+  celebrating?: boolean;
   reported?: boolean;
 }) {
   const accent = MOOD_ACCENT[c.mood] ?? "#4a7b96";
@@ -56,10 +59,25 @@ function ConfessionCard({
 
       <div className="flex items-center justify-between text-sm text-muted">
         <span>anonymous &middot; C block</span>
-        <span className="flex items-center gap-1.5 font-medium" style={{ color: accent }}>
-          {alreadyHearted ? "♥" : "♡"} {c.hearts}
+        <span
+          className={`flex items-center gap-1.5 font-medium transition-transform ${
+            celebrating ? "scale-125" : ""
+          }`}
+          style={{ color: accent }}
+        >
+          {hearted ? "♥" : "♡"} {c.hearts}
         </span>
       </div>
+
+      {celebrating && (
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-0 grid animate-[pop_520ms_ease-out] place-items-center text-7xl"
+          style={{ color: accent }}
+        >
+          ♥
+        </span>
+      )}
 
       {reported && (
         <div className="absolute inset-0 grid place-items-center rounded-3xl bg-surface/95 px-6 text-center">
