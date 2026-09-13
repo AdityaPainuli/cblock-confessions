@@ -6,6 +6,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import ComposeSheet from "./ComposeSheet";
 import ConfessionDeck from "./ConfessionDeck";
 import CampusFallback from "./CampusFallback";
+import AnnouncementBanner, { useAnnouncement } from "./AnnouncementBanner";
 import { useDeviceTier } from "@/lib/useDeviceTier";
 import { BLOCKS, getBlock, type BlockId } from "@/lib/blocks";
 import { TAGS, type Confession } from "@/lib/types";
@@ -26,6 +27,7 @@ export default function Experience({
   initialCursor: string | null;
 }) {
   const tier = useDeviceTier();
+  const announcement = useAnnouncement();
   const [stage, setStage] = useState<Stage>("campus");
   const [wall, setWall] = useState<BlockId>("C");
   const [showPanel, setShowPanel] = useState(false);
@@ -253,7 +255,10 @@ export default function Experience({
             exit={{ opacity: 0, y: 28 }}
             transition={{ duration: 0.45 }}
           >
-            <header className="px-4 pt-[max(1rem,env(safe-area-inset-top))]">
+            <div className="pt-[max(0.25rem,env(safe-area-inset-top))]" />
+            <AnnouncementBanner announcement={announcement} />
+
+            <header className="px-4 pt-3">
               <button
                 onClick={back}
                 className="min-h-11 rounded-full border border-line bg-surface/80 px-4 text-sm text-foreground backdrop-blur transition active:scale-95"
@@ -336,7 +341,10 @@ export default function Experience({
             exit={{ opacity: 0, y: 32 }}
             transition={{ duration: 0.45 }}
           >
-            <header className="flex items-center justify-between gap-3 px-4 pt-[max(1rem,env(safe-area-inset-top))]">
+            <div className="pt-[max(0.25rem,env(safe-area-inset-top))]" />
+            <AnnouncementBanner announcement={announcement} />
+
+            <header className="flex items-center justify-between gap-3 px-4 pt-3">
               <button
                 onClick={back}
                 className="min-h-11 shrink-0 rounded-full border border-line bg-surface/80 px-4 text-sm text-foreground backdrop-blur transition active:scale-95"

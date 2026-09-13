@@ -20,9 +20,11 @@ Next.js 16 + Supabase + react-three-fiber + Framer Motion.
 5. **The wall.** Confessions arrive as a swipeable card deck. Right swipe
    hearts it, left swipe skips, the flag reports it. Sort by latest or top,
    filter by tag, and the next page loads before you reach the end.
-6. **Confess.** Two steps: say which block you study in (and your course, if we
-   have mapped that block yet), then write. No account needed.
-7. **/admin.** Password-gated moderation plus the submission log.
+6. **Confess.** First time, say which block you study in and your course. That
+   is remembered, so afterwards you go straight to writing, with a
+   *You: B Block · MCA* chip you can tap to change it. No account needed.
+7. **/admin.** Password-gated moderation, the submission log, and the site
+   announcement banner.
 
 ## Camera flights
 
@@ -118,6 +120,20 @@ renders it instead of the procedural campus. Nothing else to change.
 Push to GitHub, import into Vercel, paste the same four environment variables.
 On Vercel the edge geo headers are used for location, so no external lookup is
 needed.
+
+## Announcements
+
+The admin panel can put a banner on the site for an event, a deadline or
+downtime. One is live at a time and publishing a new one retires the last.
+
+- **info** is dismissible, and a reader who closes it still sees the next one.
+- **alert** cannot be dismissed.
+- An optional link is accepted only as `http(s)`, so a banner can never carry a
+  `javascript:` or `data:` URL.
+
+The banner sits in normal flow above the header rather than floating over it,
+so nothing is ever covered. `GET /api/announcement` is public; writing needs the
+admin session.
 
 ## Hearts and reports
 

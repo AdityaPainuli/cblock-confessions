@@ -2,6 +2,7 @@ import "server-only";
 import { randomUUID } from "crypto";
 import { createAdminClient } from "./supabase/admin";
 import type { Confession, Mood, Origin } from "./types";
+import type { Announcement, AnnouncementLevel } from "./announcement";
 
 export type MetaRow = Record<string, unknown> & { confession_id: string };
 export type AdminConfession = Confession & {
@@ -85,6 +86,8 @@ type MemoryStore = {
   meta: Map<string, Record<string, unknown>>;
   /** `${confessionId}:${deviceKey}:${kind}` for one-vote-per-device. */
   votes: Set<string>;
+  /** The banner currently on the site, if the admin has set one. */
+  announcement: Announcement | null;
 };
 
 /**
@@ -100,6 +103,7 @@ const memory: MemoryStore = (globalStore.__cbcMemory ??= {
   confessions: [...SEED],
   meta: new Map(),
   votes: new Set(),
+  announcement: null,
 });
 
 export async function listPublic(
@@ -287,5 +291,72 @@ export async function remove(id: string) {
     return;
   }
   const { error } = await createAdminClient().from("confessions").delete().eq("id", id);
+  if (error) throw new Error(error.message);
+}
+
+// ---------------------------------------------------------------------------
+// Announcements. One banner at a time, set from the admin panel.
+// ---------------------------------------------------------------------------
+
+export async function getAnnouncement(): Promise<Announcement | null> {
+  if (!hasSupabase()) return memory.announcement;
+
+  const { data, error } = await createAdminClient()
+    .from("announcements")
+    .select("id, message, level, link_url, link_label, created_at")
+    .eq("active", true)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  return (data as Announcement) ?? null;
+}
+
+export async function setAnnouncement(input: {
+  message: string;
+  level: AnnouncementLevel;
+  linkUrl?: string;
+  linkLabel?: string;
+}): Promise<Announcement> {
+  const row = {
+    message: input.message,
+    level: input.level,
+    link_url: input.linkUrl || null,
+    link_label: input.linkLabel || null,
+  };
+
+  if (!hasSupabase()) {
+    memory.announcement = {
+      id: randomUUID(),
+      ...row,
+      created_at: new Date().toISOString(),
+    };
+    return memory.announcement;
+  }
+
+  const supabase = createAdminClient();
+  // Only one banner shows at a time, so retire the rest before adding this one.
+  await supabase.from("announcements").update({ active: false }).eq("active", true);
+
+  const { data, error } = await supabase
+    .from("announcements")
+    .insert({ ...row, active: true })
+    .select("id, message, level, link_url, link_label, created_at")
+    .single();
+
+  if (error || !data) throw new Error(error?.message ?? "Could not save that.");
+  return data as Announcement;
+}
+
+export async function clearAnnouncement(): Promise<void> {
+  if (!hasSupabase()) {
+    memory.announcement = null;
+    return;
+  }
+  const { error } = await createAdminClient()
+    .from("announcements")
+    .update({ active: false })
+    .eq("active", true);
   if (error) throw new Error(error.message);
 }

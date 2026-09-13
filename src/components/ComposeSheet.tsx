@@ -4,14 +4,25 @@ import { useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { collectSignals } from "@/lib/signals";
 import { BLOCKS, coursesFor, type BlockId } from "@/lib/blocks";
+import { readIdentity, writeIdentity } from "@/lib/identity";
 import { MOODS, TAGS, type Mood } from "@/lib/types";
 
 const MAX = 1000;
 
 type Step = "who" | "write";
 
-export default function ComposeSheet({
-  open,
+export default function ComposeSheet(props: {
+  open: boolean;
+  onClose: () => void;
+  onPosted: () => void;
+  toBlock: BlockId;
+}) {
+  // Mounted only while open so its state starts from storage each time,
+  // rather than being synced back in from an effect.
+  return <AnimatePresence>{props.open && <Sheet {...props} />}</AnimatePresence>;
+}
+
+function Sheet({
   onClose,
   onPosted,
   toBlock,
@@ -21,9 +32,12 @@ export default function ComposeSheet({
   onPosted: () => void;
   toBlock: BlockId;
 }) {
-  const [step, setStep] = useState<Step>("who");
-  const [fromBlock, setFromBlock] = useState<BlockId | null>(null);
-  const [fromCourse, setFromCourse] = useState<string | null>(null);
+  const saved = useMemo(() => readIdentity(), []);
+  // Asked once, then remembered, so a returning student goes straight to
+  // writing instead of re-picking their own block every time.
+  const [step, setStep] = useState<Step>(saved ? "write" : "who");
+  const [fromBlock, setFromBlock] = useState<BlockId | null>(saved?.block ?? null);
+  const [fromCourse, setFromCourse] = useState<string | null>(saved?.course ?? null);
   const [body, setBody] = useState("");
   const [tag, setTag] = useState<string>("general");
   const [mood, setMood] = useState<Mood>("neutral");
@@ -34,16 +48,7 @@ export default function ComposeSheet({
   const courses = useMemo(() => (fromBlock ? coursesFor(fromBlock) : []), [fromBlock]);
   const target = BLOCKS.find((b) => b.id === toBlock);
 
-  function reset() {
-    setStep("who");
-    setFromBlock(null);
-    setFromCourse(null);
-    setBody("");
-    setError(null);
-  }
-
   function close() {
-    reset();
     onClose();
   }
 
@@ -84,14 +89,12 @@ export default function ComposeSheet({
   }
 
   return (
-    <AnimatePresence>
-      {open && (
-        <motion.div
-          className="fixed inset-0 z-50 flex items-end justify-center sm:items-center"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-        >
+    <motion.div
+      className="fixed inset-0 z-50 flex items-end justify-center sm:items-center"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+    >
           <div className="absolute inset-0 bg-[#2f2419]/45 backdrop-blur-sm" onClick={close} />
 
           <motion.div
@@ -185,7 +188,10 @@ export default function ComposeSheet({
                     Cancel
                   </button>
                   <button
-                    onClick={() => setStep("write")}
+                    onClick={() => {
+                      if (fromBlock) writeIdentity({ block: fromBlock, course: fromCourse ?? undefined });
+                      setStep("write");
+                    }}
                     disabled={!fromBlock}
                     className="min-h-12 flex-[2] rounded-full bg-maroon font-medium text-[#fff4e6] shadow-[0_12px_34px_-14px_rgba(139,26,43,0.9)] transition active:scale-95 disabled:opacity-40"
                   >
@@ -197,10 +203,13 @@ export default function ComposeSheet({
               <>
                 <button
                   onClick={() => setStep("who")}
-                  className="min-h-10 text-sm text-muted transition"
+                  className="inline-flex min-h-10 items-center gap-2 rounded-full border border-line px-3 text-sm text-muted transition active:scale-95"
                 >
-                  {"←"} {BLOCKS.find((b) => b.id === fromBlock)?.label}
-                  {fromCourse ? ` · ${fromCourse}` : ""}
+                  <span className="font-medium text-foreground">
+                    You: {BLOCKS.find((b) => b.id === fromBlock)?.label}
+                    {fromCourse ? ` · ${fromCourse}` : ""}
+                  </span>
+                  <span className="text-xs uppercase tracking-wide">change</span>
                 </button>
 
                 <h2 className="mt-3 text-xl font-semibold text-foreground">
@@ -274,9 +283,7 @@ export default function ComposeSheet({
                 </div>
               </>
             )}
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+      </motion.div>
+    </motion.div>
   );
 }

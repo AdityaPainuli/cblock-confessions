@@ -86,17 +86,42 @@ create table if not exists public.confession_votes (
 );
 
 -- ---------------------------------------------------------------------------
+-- Admin announcements. One row is active at a time; the site shows it as a
+-- banner. Public and readable, unlike everything else in the admin surface.
+-- ---------------------------------------------------------------------------
+create table if not exists public.announcements (
+  id         uuid primary key default gen_random_uuid(),
+  message    text not null check (char_length(message) between 2 and 280),
+  -- 'info' for news, 'alert' for something people need to act on.
+  level      text not null default 'info' check (level in ('info', 'alert')),
+  link_url   text,
+  link_label text,
+  active     boolean not null default true,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists announcements_active_idx
+  on public.announcements (active, created_at desc);
+
+-- ---------------------------------------------------------------------------
 -- Row level security
 -- ---------------------------------------------------------------------------
 alter table public.confessions     enable row level security;
 alter table public.confession_meta enable row level security;
 alter table public.confession_votes enable row level security;
+alter table public.announcements    enable row level security;
 
 drop policy if exists "approved confessions are public" on public.confessions;
 create policy "approved confessions are public"
   on public.confessions for select
   to anon, authenticated
   using (status = 'approved');
+
+drop policy if exists "active announcements are public" on public.announcements;
+create policy "active announcements are public"
+  on public.announcements for select
+  to anon, authenticated
+  using (active);
 
 -- confession_meta and confession_votes intentionally have zero policies.
 -- Only the service-role key (server side) can read or write them.

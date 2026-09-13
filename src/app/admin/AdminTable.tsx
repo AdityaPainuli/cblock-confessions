@@ -2,6 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import AnnouncementPanel from "./AnnouncementPanel";
+import type { Announcement } from "@/lib/announcement";
 
 export type AdminRow = {
   id: string;
@@ -32,7 +34,15 @@ function Field({ label, value }: { label: string; value: unknown }) {
   );
 }
 
-export default function AdminTable({ rows, demo }: { rows: AdminRow[]; demo?: boolean }) {
+export default function AdminTable({
+  rows,
+  demo,
+  announcement,
+}: {
+  rows: AdminRow[];
+  demo?: boolean;
+  announcement: Announcement | null;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState<string | null>(null);
   const [filter, setFilter] = useState("all");
@@ -82,6 +92,8 @@ export default function AdminTable({ rows, demo }: { rows: AdminRow[]; demo?: bo
           Log out
         </button>
       </header>
+
+      <AnnouncementPanel current={announcement} />
 
       {demo && (
         <p className="mb-5 rounded-xl border border-gold/40 bg-gold/12 px-4 py-3 text-sm text-[#7a6212]">
