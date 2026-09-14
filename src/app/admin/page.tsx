@@ -1,5 +1,5 @@
 import { headers } from "next/headers";
-import { isAdmin } from "@/lib/auth";
+import { adminConfigured, isAdmin } from "@/lib/auth";
 import { campusGateEnabled, isOnCampus } from "@/lib/campus";
 import { clientIp } from "@/lib/device";
 import { getAnnouncement, hasSupabase, listAdmin } from "@/lib/data";
@@ -9,6 +9,23 @@ import AdminTable, { type AdminRow } from "./AdminTable";
 export const dynamic = "force-dynamic";
 
 export default async function AdminPage() {
+  if (!adminConfigured()) {
+    return (
+      <main className="min-h-[100dvh] bg-background px-6 py-16 text-foreground">
+        <div className="mx-auto max-w-md">
+          <h1 className="text-xl font-semibold">Admin is not set up yet</h1>
+          <p className="mt-2 text-sm leading-relaxed text-muted">
+            Set <code>ADMIN_PASSWORD</code> and <code>ADMIN_SESSION_SECRET</code> in
+            this deployment&apos;s environment variables, then redeploy.
+            <code className="mt-3 block rounded-lg bg-surface px-3 py-2 font-mono text-xs">
+              openssl rand -hex 32
+            </code>
+          </p>
+        </div>
+      </main>
+    );
+  }
+
   if (!(await isAdmin())) return <LoginForm />;
 
   let rows: AdminRow[];

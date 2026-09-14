@@ -5,6 +5,12 @@ import { cookies } from "next/headers";
 const COOKIE = "cbc_admin";
 const TTL_MS = 1000 * 60 * 60 * 8;
 
+/** Both must be set before the admin panel can do anything. */
+export function adminConfigured() {
+  const s = process.env.ADMIN_SESSION_SECRET;
+  return Boolean(s && s.length >= 16 && process.env.ADMIN_PASSWORD);
+}
+
 function secret() {
   const s = process.env.ADMIN_SESSION_SECRET;
   if (!s || s.length < 16) {
@@ -49,6 +55,8 @@ export async function endSession() {
 }
 
 export async function isAdmin() {
+  if (!adminConfigured()) return false;
+
   const raw = (await cookies()).get(COOKIE)?.value;
   if (!raw) return false;
   const parts = raw.split(".");
