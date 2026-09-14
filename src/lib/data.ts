@@ -119,6 +119,35 @@ const memory: MemoryStore = (globalStore.__cbcMemory ??= {
   announcement: null,
 });
 
+/**
+ * Writes a submission's origin record.
+ *
+ * The confession or reply itself is already saved by this point, and losing
+ * the poster's own words because the audit row failed would be the wrong
+ * trade. So a failure here is retried once and then logged loudly rather than
+ * thrown: the post survives, and the gap shows up in the logs instead of
+ * vanishing silently, which is what used to happen.
+ */
+async function writeMeta(
+  supabase: ReturnType<typeof createAdminClient>,
+  table: "confession_meta" | "comment_meta",
+  row: Record<string, unknown>,
+): Promise<void> {
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const { error } = await supabase.from(table).insert(row);
+    if (!error) return;
+
+    if (attempt === 2) {
+      console.error(
+        `[${table}] origin record lost for ${JSON.stringify(
+          row.confession_id ?? row.comment_id,
+        )}: ${error.message}`,
+      );
+      return;
+    }
+  }
+}
+
 export async function listPublic(
   tag?: string | null,
   toBlock: string = "C",
@@ -218,7 +247,7 @@ export async function create(
 
   if (error || !data) throw new Error(error?.message ?? "Insert failed.");
 
-  await supabase.from("confession_meta").insert({ confession_id: data.id, ...fullMeta });
+  await writeMeta(supabase, "confession_meta", { confession_id: data.id, ...fullMeta });
   return data.id;
 }
 
@@ -436,7 +465,7 @@ export async function createComment(
   if (error?.code === "23503") return null;
   if (error || !data) throw new Error(error?.message ?? "Could not save that reply.");
 
-  await supabase.from("comment_meta").insert({ comment_id: data.id, ...meta });
+  await writeMeta(supabase, "comment_meta", { comment_id: data.id, ...meta });
   return data as Comment;
 }
 
