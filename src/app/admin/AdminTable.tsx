@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import AnnouncementPanel from "./AnnouncementPanel";
 import type { Announcement } from "@/lib/announcement";
+import type { AdminComment } from "@/lib/data";
 
 export type AdminRow = {
   id: string;
@@ -38,12 +39,14 @@ export default function AdminTable({
   rows,
   demo,
   announcement,
+  comments,
   network,
 }: {
   rows: AdminRow[];
   demo?: boolean;
   announcement: Announcement | null;
-  network: { ip?: string; gated: boolean; onCampus: boolean };
+  comments: AdminComment[];
+  network: { ip?: string; gated: boolean; allowed: boolean };
 }) {
   const router = useRouter();
   const [open, setOpen] = useState<string | null>(null);
@@ -67,6 +70,11 @@ export default function AdminTable({
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ status }),
     });
+    router.refresh();
+  }
+
+  async function removeReply(id: string) {
+    await fetch(`/api/admin/comments/${id}`, { method: "DELETE" });
     router.refresh();
   }
 
@@ -98,25 +106,26 @@ export default function AdminTable({
       <AnnouncementPanel current={announcement} />
 
       <section className="mb-5 rounded-2xl border border-line bg-surface p-4">
-        <h2 className="text-sm font-semibold text-foreground">Campus network gate</h2>
+        <h2 className="text-sm font-semibold text-foreground">Reply network gate</h2>
         {network.gated ? (
           <p className="mt-1 text-sm text-muted">
-            On. Only the ranges in <code>CAMPUS_IP_RANGES</code> can reach the wall.
-            This request came from{" "}
+            On. Only the ranges in <code>COMMENT_IP_RANGES</code> can reply to a
+            confession; reading and confessing are open to everyone. This request
+            came from{" "}
             <code className="rounded bg-[#fdf7ec] px-1.5 py-0.5 font-mono text-xs text-foreground">
               {network.ip ?? "unknown"}
             </code>
             , which is{" "}
-            <span className={network.onCampus ? "text-[#2f6047]" : "text-maroon"}>
-              {network.onCampus ? "inside" : "outside"}
+            <span className={network.allowed ? "text-[#2f6047]" : "text-maroon"}>
+              {network.allowed ? "inside" : "outside"}
             </span>{" "}
             the allowlist.
           </p>
         ) : (
           <p className="mt-1 text-sm text-muted">
-            Off, so the wall is reachable from anywhere. To close it, open this page
-            on campus wifi, note the address below, and set{" "}
-            <code>CAMPUS_IP_RANGES</code> to the range it belongs to.
+            Off, so anyone can reply. To limit replies to the block, open this page
+            on that wifi, note the address below, and set{" "}
+            <code>COMMENT_IP_RANGES</code> to the range it belongs to.
             <code className="mt-2 block rounded-lg bg-[#fdf7ec] px-3 py-2 font-mono text-xs text-foreground">
               {network.ip ?? "unknown"}
             </code>
@@ -269,6 +278,42 @@ export default function AdminTable({
         })}
         {!visible.length && <p className="text-muted">Nothing matches that filter.</p>}
       </div>
+
+      <section className="mt-8">
+        <h2 className="text-sm font-semibold text-foreground">
+          Replies <span className="font-normal text-muted">({comments.length})</span>
+        </h2>
+
+        <div className="mt-3 space-y-2">
+          {comments.map((c) => {
+            const m = c.meta ?? {};
+            return (
+              <article
+                key={c.id}
+                className="flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-line bg-surface p-4"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm leading-relaxed text-foreground">{c.body}</p>
+                  <p className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-muted">
+                    <span>{new Date(c.created_at).toLocaleString()}</span>
+                    {!!m.ip && <span className="font-mono">{String(m.ip)}</span>}
+                    {!!m.geo_city && <span>{String(m.geo_city)}</span>}
+                  </p>
+                </div>
+                <button
+                  onClick={() => removeReply(c.id)}
+                  className="shrink-0 rounded-lg bg-maroon/12 px-3 py-1.5 text-xs text-maroon transition hover:bg-maroon/20"
+                >
+                  Delete
+                </button>
+              </article>
+            );
+          })}
+          {!comments.length && (
+            <p className="text-sm text-muted">No replies yet.</p>
+          )}
+        </div>
+      </section>
     </main>
   );
 }

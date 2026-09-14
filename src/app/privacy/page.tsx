@@ -92,6 +92,16 @@ export default function PrivacyPage() {
           </p>
         </Section>
 
+        <Section title="Replies">
+          <p>
+            Replying is limited to people on the block wifi; reading the wall and
+            posting a confession are open to anyone. A reply is anonymous to other
+            students in the same way a confession is, and the site records the
+            address, browser and rough location it came from where only the admin
+            can read it.
+          </p>
+        </Section>
+
         <Section title="Hearts and reports">
           <p>
             A heart or a report is recorded against your browser fingerprint so each
@@ -100,17 +110,10 @@ export default function PrivacyPage() {
           </p>
         </Section>
 
-        <Section title="Campus network">
-          <p>
-            The wall is reachable only from the university network, so the site also
-            sees the address you connect from. That is what decides whether you get
-            in.
-          </p>
-        </Section>
-
         <Section title="Getting something taken down">
           <p>
-            Anything on the wall can be reported with the flag under a confession.
+            Any confession can be reported with the flag under it, and replies can
+            be removed by the admin.
             Enough reports and it comes down on its own pending review. If a
             confession is about you, or you want your own removed, contact{" "}
             <Contact /> and quote the first few words of it.

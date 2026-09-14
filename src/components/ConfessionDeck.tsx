@@ -16,11 +16,13 @@ const LIKE_BEAT_MS = 520;
 export default function ConfessionDeck({
   items,
   onHeart,
+  onOpenReplies,
   onNeedMore,
   exhausted,
 }: {
   items: Confession[];
   onHeart: (id: string) => void;
+  onOpenReplies: (c: Confession) => void;
   onNeedMore: () => void;
   exhausted: boolean;
 }) {
@@ -169,6 +171,7 @@ export default function ConfessionDeck({
                   hearted={isTop ? topLiked : hasVoted(c.id, "heart")}
                   celebrating={liked === c.id}
                   reported={reported === c.id}
+                  onOpenReplies={isTop ? () => onOpenReplies(c) : undefined}
                 />
                 {isTop && (
                   <>

@@ -25,12 +25,14 @@ function ConfessionCard({
   hearted,
   celebrating,
   reported,
+  onOpenReplies,
 }: {
   c: Confession;
   hearted?: boolean;
   /** Plays the burst for the beat between tapping heart and the card leaving. */
   celebrating?: boolean;
   reported?: boolean;
+  onOpenReplies?: () => void;
 }) {
   const accent = MOOD_ACCENT[c.mood] ?? "#4a7b96";
 
@@ -58,7 +60,18 @@ function ConfessionCard({
       </p>
 
       <div className="flex items-center justify-between text-sm text-muted">
-        <span>anonymous &middot; C block</span>
+        {onOpenReplies ? (
+          <button
+            onClick={onOpenReplies}
+            className="-ml-1 min-h-9 rounded-full px-2 text-left transition active:scale-95 hover:text-foreground"
+          >
+            {c.comments > 0
+              ? `${c.comments} ${c.comments === 1 ? "reply" : "replies"}`
+              : "Reply"}
+          </button>
+        ) : (
+          <span>anonymous</span>
+        )}
         <span
           className={`flex items-center gap-1.5 font-medium transition-transform ${
             celebrating ? "scale-125" : ""

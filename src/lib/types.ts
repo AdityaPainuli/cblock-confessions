@@ -35,8 +35,17 @@ export type Confession = {
   /** The wall this confession was posted to. */
   to_block: string;
   hearts: number;
+  comments: number;
   created_at: string;
 };
+
+export type Comment = {
+  id: string;
+  body: string;
+  created_at: string;
+};
+
+export const MAX_COMMENT = 400;
 
 /**
  * Where the author studies. Collected for insight into which blocks are using

@@ -58,6 +58,7 @@ export const QUOTAS = {
   post: { ip: 40, device: 5, windowMs: 10 * MINUTE },
   heart: { ip: 600, device: 60, windowMs: MINUTE },
   report: { ip: 120, device: 10, windowMs: MINUTE },
+  comment: { ip: 120, device: 12, windowMs: 5 * MINUTE },
 } as const;
 
 export type Quota = keyof typeof QUOTAS;

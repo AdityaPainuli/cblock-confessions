@@ -121,32 +121,35 @@ Push to GitHub, import into Vercel, paste the same four environment variables.
 On Vercel the edge geo headers are used for location, so no external lookup is
 needed.
 
-## Campus network gate
+## Who can do what
 
-The wall is meant for students on campus, and a browser cannot read the wifi
-SSID, so "are you on campus" is answered by where the request comes from:
-traffic on the university network leaves through the university's own public
-addresses.
+| | Anyone | Block wifi only |
+|---|---|---|
+| Read the wall | yes | |
+| Post a confession | yes | |
+| Heart / report | yes | |
+| Read a reply thread | yes | |
+| **Write a reply** | | **yes** |
 
-Put those in `CAMPUS_IP_RANGES` (comma-separated CIDRs, IPv4 and IPv6) and only
-they get in — reading as well as posting, enforced on the page **and** on every
-API route, since a page-only check would be walked around by calling the
-endpoints directly. Leave it empty and the gate is off.
+Confessing is the point of the site, so the landing leads with it: a **Confess
+something** button, with *or read the wall* underneath. Once a confession lands,
+the confirmation offers to read everyone else's — writing first, reading second.
 
-To find the range: open `/admin` while on campus wifi. The network panel shows
-the address the site sees; set the range it belongs to.
+Replying is the one thing held back. A browser cannot read the wifi SSID, so
+"are you on the block wifi" is answered by where the request comes from: that
+network leaves through its own public addresses. Put those in
+`COMMENT_IP_RANGES` (comma-separated CIDRs, IPv4 and IPv6) and only they can
+reply. Leave it empty and anyone can.
+
+To find the range: open `/admin` on that wifi. The network panel shows the
+address the site sees.
 
 What this buys, and what it does not:
 
-- it keeps the wall off the open internet, which is the point;
-- campus wifi passes, **campus mobile data does not** — that is the carrier's
-  network, not the university's;
-- a VPN back onto the campus network passes, and a VPN off it fails;
-- anyone who can reach the university network can reach the wall, so this is a
-  fence, not an identity check.
-
-`/privacy` stays reachable from anywhere, so the notice can be read before
-connecting.
+- wifi passes, **mobile data does not** — that is the carrier's network;
+- a VPN off the network fails, one back onto it passes;
+- if the block shares an egress with the rest of campus, this is campus-wide in
+  practice, because that is all an address can prove.
 
 The address matcher is pure and covered by `npm test` — 27 cases including
 non-byte-aligned prefixes, IPv4-mapped IPv6, family crossing and malformed
@@ -187,6 +190,7 @@ else is on the wifi. Quotas live in `QUOTAS` in `src/lib/ratelimit.ts`:
 | | per device | per address | window |
 |---|---|---|---|
 | post | 5 | 40 | 10 min |
+| comment | 12 | 120 | 5 min |
 | heart | 60 | 600 | 1 min |
 | report | 10 | 120 | 1 min |
 

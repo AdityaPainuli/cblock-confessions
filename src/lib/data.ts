@@ -1,11 +1,18 @@
 import "server-only";
 import { randomUUID } from "crypto";
 import { createAdminClient } from "./supabase/admin";
-import type { Confession, Mood, Origin } from "./types";
+import type { Comment, Confession, Mood, Origin } from "./types";
 import type { Announcement, AnnouncementLevel } from "./announcement";
 
 export type MetaRow = Record<string, unknown> & { confession_id: string };
 export type AdminConfession = Confession & {
+  status: string;
+  reports: number;
+  meta?: Record<string, unknown> | null;
+};
+
+export type AdminComment = Comment & {
+  confession_id: string;
   status: string;
   reports: number;
   meta?: Record<string, unknown> | null;
@@ -40,6 +47,7 @@ const SEED: Omit<AdminConfession, "meta">[] = [
     body: "I have been sitting in the wrong section for three weeks and the professor still marks me present. At this point it is my section.",
     tag: "attendance",
     reports: 0,
+    comments: 0,
     mood: "cringe",
     to_block: "C",
     status: "approved",
@@ -51,6 +59,7 @@ const SEED: Omit<AdminConfession, "meta">[] = [
     body: "Whoever plays guitar on the C block stairs at 6pm, I plan my whole evening around walking past. That is all.",
     tag: "crush",
     reports: 0,
+    comments: 0,
     mood: "crush",
     to_block: "C",
     status: "approved",
@@ -62,6 +71,7 @@ const SEED: Omit<AdminConfession, "meta">[] = [
     body: "I told my group I finished my part of the project. I have not opened the file. The presentation is tomorrow. Pray for me.",
     tag: "exams",
     reports: 0,
+    comments: 0,
     mood: "guilt",
     to_block: "C",
     status: "approved",
@@ -73,6 +83,7 @@ const SEED: Omit<AdminConfession, "meta">[] = [
     body: "The canteen samosa went from 15 to 25 rupees and nobody is protesting. This is the real crisis on campus.",
     tag: "canteen",
     reports: 0,
+    comments: 0,
     mood: "rage",
     to_block: "C",
     status: "approved",
@@ -83,6 +94,7 @@ const SEED: Omit<AdminConfession, "meta">[] = [
 
 type MemoryStore = {
   confessions: AdminConfession[];
+  comments: AdminComment[];
   meta: Map<string, Record<string, unknown>>;
   /** `${confessionId}:${deviceKey}:${kind}` for one-vote-per-device. */
   votes: Set<string>;
@@ -101,6 +113,7 @@ const globalStore = globalThis as typeof globalThis & {
 
 const memory: MemoryStore = (globalStore.__cbcMemory ??= {
   confessions: [...SEED],
+  comments: [],
   meta: new Map(),
   votes: new Set(),
   announcement: null,
@@ -133,6 +146,7 @@ export async function listPublic(
         mood: c.mood,
         to_block: c.to_block,
         hearts: c.hearts,
+        comments: c.comments,
         created_at: c.created_at,
       }));
 
@@ -145,7 +159,7 @@ export async function listPublic(
   const from = cursor ? Number(cursor) || 0 : 0;
   let query = createAdminClient()
     .from("confessions")
-    .select("id, body, tag, mood, to_block, hearts, created_at")
+    .select("id, body, tag, mood, to_block, hearts, comments, created_at")
     .eq("status", "approved")
     .eq("to_block", toBlock)
     .range(from, from + PAGE_SIZE - 1);
@@ -188,6 +202,7 @@ export async function create(
       status: "approved",
       hearts: 0,
       reports: 0,
+      comments: 0,
       created_at: new Date().toISOString(),
     });
     memory.meta.set(id, fullMeta);
@@ -358,5 +373,111 @@ export async function clearAnnouncement(): Promise<void> {
     .from("announcements")
     .update({ active: false })
     .eq("active", true);
+  if (error) throw new Error(error.message);
+}
+
+// ---------------------------------------------------------------------------
+// Replies. Anyone may read a thread; only the block network may add to it.
+// ---------------------------------------------------------------------------
+
+export async function listComments(confessionId: string): Promise<Comment[]> {
+  if (!hasSupabase()) {
+    return memory.comments
+      .filter((c) => c.confession_id === confessionId && c.status === "approved")
+      .sort((a, b) => a.created_at.localeCompare(b.created_at))
+      .map((c) => ({ id: c.id, body: c.body, created_at: c.created_at }));
+  }
+
+  const { data, error } = await createAdminClient()
+    .from("comments")
+    .select("id, body, created_at")
+    .eq("confession_id", confessionId)
+    .eq("status", "approved")
+    .order("created_at", { ascending: true })
+    .limit(200);
+
+  if (error) throw new Error(error.message);
+  return (data ?? []) as Comment[];
+}
+
+export async function createComment(
+  confessionId: string,
+  body: string,
+  meta: Record<string, unknown>,
+): Promise<Comment | null> {
+  if (!hasSupabase()) {
+    const parent = memory.confessions.find(
+      (c) => c.id === confessionId && c.status === "approved",
+    );
+    if (!parent) return null;
+
+    const comment: AdminComment = {
+      id: randomUUID(),
+      confession_id: confessionId,
+      body,
+      status: "approved",
+      reports: 0,
+      created_at: new Date().toISOString(),
+    };
+    memory.comments.push(comment);
+    parent.comments += 1;
+    memory.meta.set(comment.id, meta);
+    return { id: comment.id, body: comment.body, created_at: comment.created_at };
+  }
+
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("comments")
+    .insert({ confession_id: confessionId, body, status: "approved" })
+    .select("id, body, created_at")
+    .single();
+
+  // A reply to a confession that has since gone is a 404, not a 500.
+  if (error?.code === "23503") return null;
+  if (error || !data) throw new Error(error?.message ?? "Could not save that reply.");
+
+  await supabase.from("comment_meta").insert({ comment_id: data.id, ...meta });
+  return data as Comment;
+}
+
+export async function listAdminComments(): Promise<AdminComment[]> {
+  if (!hasSupabase()) {
+    return [...memory.comments]
+      .sort((a, b) => b.created_at.localeCompare(a.created_at))
+      .map((c) => ({ ...c, meta: memory.meta.get(c.id) ?? null }));
+  }
+
+  const { data, error } = await createAdminClient()
+    .from("comments")
+    .select("*, comment_meta(*)")
+    .order("created_at", { ascending: false })
+    .limit(200);
+
+  if (error) throw new Error(error.message);
+
+  return (data ?? []).map((row) => {
+    const { comment_meta, ...comment } = row as Record<string, unknown> & {
+      comment_meta: unknown;
+    };
+    return {
+      ...comment,
+      meta: Array.isArray(comment_meta) ? comment_meta[0] : comment_meta,
+    } as AdminComment;
+  });
+}
+
+export async function removeComment(id: string): Promise<void> {
+  if (!hasSupabase()) {
+    const i = memory.comments.findIndex((c) => c.id === id);
+    if (i === -1) return;
+    const parent = memory.confessions.find(
+      (c) => c.id === memory.comments[i].confession_id,
+    );
+    if (parent) parent.comments = Math.max(0, parent.comments - 1);
+    memory.comments.splice(i, 1);
+    memory.meta.delete(id);
+    return;
+  }
+  const { error } = await createAdminClient().from("comments").delete().eq("id", id);
   if (error) throw new Error(error.message);
 }

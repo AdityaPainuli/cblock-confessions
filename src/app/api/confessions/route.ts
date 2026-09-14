@@ -4,7 +4,6 @@ import { z } from "zod";
 import { buildMeta, clientIp, geoLookup } from "@/lib/device";
 import { create, listPublic } from "@/lib/data";
 import { allowWrite } from "@/lib/ratelimit";
-import { isOnCampus } from "@/lib/campus";
 import { TAGS } from "@/lib/types";
 import { ALL_COURSES, BLOCK_IDS, getBlock } from "@/lib/blocks";
 
@@ -23,18 +22,8 @@ const Body = z.object({
   signals: z.record(z.string(), z.unknown()).default({}),
 });
 
-const OFF_CAMPUS = {
-  error: "This wall is only open on the university network.",
-  offCampus: true,
-} as const;
-
 export async function GET(req: Request) {
   const params = new URL(req.url).searchParams;
-
-  // The page gate would be trivial to walk around by calling this directly.
-  if (!isOnCampus(clientIp(await headers()))) {
-    return NextResponse.json(OFF_CAMPUS, { status: 403 });
-  }
 
   try {
     const toBlock = params.get("block") ?? "C";
@@ -53,8 +42,6 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const h = await headers();
   const ip = clientIp(h);
-
-  if (!isOnCampus(ip)) return NextResponse.json(OFF_CAMPUS, { status: 403 });
 
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {

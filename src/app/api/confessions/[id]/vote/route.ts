@@ -4,7 +4,6 @@ import { z } from "zod";
 import { clientIp } from "@/lib/device";
 import { castVote } from "@/lib/data";
 import { allowWrite } from "@/lib/ratelimit";
-import { isOnCampus } from "@/lib/campus";
 
 export const runtime = "nodejs";
 
@@ -20,13 +19,6 @@ export async function POST(
 ) {
   const { id } = await params;
   const ip = clientIp(await headers()) ?? "unknown";
-
-  if (!isOnCampus(ip)) {
-    return NextResponse.json(
-      { error: "This wall is only open on the university network." },
-      { status: 403 },
-    );
-  }
 
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {

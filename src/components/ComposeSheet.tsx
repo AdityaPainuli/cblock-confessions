@@ -15,6 +15,8 @@ export default function ComposeSheet(props: {
   open: boolean;
   onClose: () => void;
   onPosted: () => void;
+  /** Offered once a confession lands, so reading follows writing. */
+  onReadWall?: () => void;
   toBlock: BlockId;
 }) {
   // Mounted only while open so its state starts from storage each time,
@@ -25,11 +27,13 @@ export default function ComposeSheet(props: {
 function Sheet({
   onClose,
   onPosted,
+  onReadWall,
   toBlock,
 }: {
   open: boolean;
   onClose: () => void;
   onPosted: () => void;
+  onReadWall?: () => void;
   toBlock: BlockId;
 }) {
   const saved = useMemo(() => readIdentity(), []);
@@ -77,10 +81,6 @@ function Sheet({
       setDone(true);
       setBody("");
       onPosted();
-      setTimeout(() => {
-        setDone(false);
-        close();
-      }, 1500);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not post that.");
     } finally {
@@ -105,12 +105,30 @@ function Sheet({
             transition={{ type: "spring", stiffness: 280, damping: 30 }}
           >
             {done ? (
-              <div className="py-12 text-center">
+              <div className="py-10 text-center">
                 <div className="text-5xl">{"\u{1F92B}"}</div>
                 <p className="mt-4 text-lg text-foreground">
                   It&apos;s on the {target?.label ?? "C Block"} wall.
                 </p>
                 <p className="mt-1 text-sm text-muted">No name attached.</p>
+
+                <div className="mt-7 flex flex-col gap-2">
+                  <button
+                    onClick={() => {
+                      onReadWall?.();
+                      close();
+                    }}
+                    className="min-h-12 rounded-full bg-maroon font-medium text-[#fff4e6] transition active:scale-95"
+                  >
+                    Read what everyone else said
+                  </button>
+                  <button
+                    onClick={close}
+                    className="min-h-11 text-sm text-muted underline underline-offset-4"
+                  >
+                    Not now
+                  </button>
+                </div>
               </div>
             ) : step === "who" ? (
               <>

@@ -1,8 +1,8 @@
 import { headers } from "next/headers";
 import { adminConfigured, isAdmin } from "@/lib/auth";
-import { campusGateEnabled, isOnCampus } from "@/lib/campus";
+import { canComment, commentGateEnabled } from "@/lib/network";
 import { clientIp } from "@/lib/device";
-import { getAnnouncement, hasSupabase, listAdmin } from "@/lib/data";
+import { getAnnouncement, hasSupabase, listAdmin, listAdminComments } from "@/lib/data";
 import LoginForm from "./LoginForm";
 import AdminTable, { type AdminRow } from "./AdminTable";
 
@@ -29,9 +29,11 @@ export default async function AdminPage() {
   if (!(await isAdmin())) return <LoginForm />;
 
   let rows: AdminRow[];
+  let comments: Awaited<ReturnType<typeof listAdminComments>> = [];
   let announcement = null;
   try {
     rows = (await listAdmin()) as AdminRow[];
+    comments = await listAdminComments();
     announcement = await getAnnouncement();
   } catch (e) {
     return (
@@ -48,7 +50,8 @@ export default async function AdminPage() {
       rows={rows}
       demo={!hasSupabase()}
       announcement={announcement}
-      network={{ ip, gated: campusGateEnabled(), onCampus: isOnCampus(ip) }}
+      comments={comments}
+      network={{ ip, gated: commentGateEnabled(), allowed: canComment(ip) }}
     />
   );
 }

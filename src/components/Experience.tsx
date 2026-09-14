@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import ComposeSheet from "./ComposeSheet";
 import ConfessionDeck from "./ConfessionDeck";
+import CommentSheet from "./CommentSheet";
 import CampusFallback from "./CampusFallback";
 import AnnouncementBanner, { useAnnouncement } from "./AnnouncementBanner";
 import { useDeviceTier } from "@/lib/useDeviceTier";
@@ -22,9 +23,13 @@ type Sort = "latest" | "top";
 export default function Experience({
   initial,
   initialCursor,
+  mayComment,
+  commentGate,
 }: {
   initial: Confession[];
   initialCursor: string | null;
+  mayComment: boolean;
+  commentGate: boolean;
 }) {
   const tier = useDeviceTier();
   const announcement = useAnnouncement();
@@ -37,6 +42,7 @@ export default function Experience({
   const [tag, setTag] = useState<string>("all");
   const [sort, setSort] = useState<Sort>("latest");
   const [composing, setComposing] = useState(false);
+  const [replyingTo, setReplyingTo] = useState<Confession | null>(null);
 
   const request = useRef(0);
   const loadingMore = useRef(false);
@@ -80,6 +86,16 @@ export default function Experience({
     }
   }, [cursor, wall, sort, tag]);
 
+  /** Keeps the card's reply count honest without refetching the page. */
+  const bumpComments = useCallback((id: string) => {
+    setItems((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, comments: c.comments + 1 } : c)),
+    );
+    setReplyingTo((prev) =>
+      prev && prev.id === id ? { ...prev, comments: prev.comments + 1 } : prev,
+    );
+  }, []);
+
   /** Counts the heart locally so the number moves the instant it is tapped. */
   const bumpHearts = useCallback((id: string) => {
     setItems((prev) =>
@@ -117,6 +133,12 @@ export default function Experience({
 
   /** Campus overview -> the block chooser. */
   const toBlocks = useCallback(() => goTo("blocks"), [goTo]);
+
+  /** The landing's primary action: straight into writing, no detour. */
+  const confessNow = useCallback(() => {
+    setWall("C");
+    setComposing(true);
+  }, []);
 
   /** Block chooser -> that block's wall. */
   const openWall = useCallback(
@@ -212,7 +234,7 @@ export default function Experience({
 
             <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[62%] bg-gradient-to-t from-[#f4ece0] via-[#f4ece0]/86 to-transparent" />
 
-            <div className="pointer-events-none relative z-10 flex h-full flex-col items-center justify-end px-5 pb-[max(3rem,env(safe-area-inset-bottom))] text-center">
+            <div className="pointer-events-none relative z-10 flex h-full flex-col items-center justify-end px-5 pb-[max(4.5rem,calc(env(safe-area-inset-bottom)+3rem))] text-center">
               <motion.div
                 initial={{ opacity: 0, y: 24 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -226,23 +248,22 @@ export default function Experience({
                   </span>
                 </h1>
                 <p className="mt-4 text-sm text-muted sm:text-base">
-                  Everything nobody says out loud in the corridor.
+                  Say the thing you would never say out loud. No name, no account.
                 </p>
 
                 <button
-                  onClick={toBlocks}
-                  className="pointer-events-auto mt-8 min-h-12 rounded-full border border-line bg-surface/85 px-7 py-3 text-sm uppercase tracking-[0.2em] text-maroon-deep shadow-sm backdrop-blur transition active:scale-95 hover:bg-surface"
+                  onClick={confessNow}
+                  className="pointer-events-auto mt-8 min-h-14 w-full max-w-xs rounded-full bg-gradient-to-r from-maroon to-terracotta px-8 text-base font-semibold text-[#fff4e6] shadow-[0_18px_44px_-16px_rgba(139,26,43,0.9)] transition active:scale-95 hover:brightness-110"
                 >
-                  Swipe up to enter
+                  Confess something
                 </button>
 
-                <motion.div
-                  className="mt-5 text-2xl text-muted"
-                  animate={{ y: [0, -10, 0] }}
-                  transition={{ repeat: Infinity, duration: 1.8, ease: "easeInOut" }}
+                <button
+                  onClick={toBlocks}
+                  className="pointer-events-auto mt-4 min-h-11 text-sm text-muted underline underline-offset-4 transition active:scale-95 hover:text-foreground"
                 >
-                  {"↑"}
-                </motion.div>
+                  or read the wall
+                </button>
               </motion.div>
             </div>
           </motion.div>
@@ -394,6 +415,7 @@ export default function Experience({
               <ConfessionDeck
                 items={items}
                 onHeart={bumpHearts}
+                onOpenReplies={setReplyingTo}
                 onNeedMore={loadMore}
                 exhausted={!cursor}
               />
@@ -423,7 +445,16 @@ export default function Experience({
         open={composing}
         onClose={() => setComposing(false)}
         onPosted={() => reload({ tag, wall, sort })}
+        onReadWall={() => stage === "campus" && goTo("wall")}
         toBlock={wall}
+      />
+
+      <CommentSheet
+        confession={replyingTo}
+        onClose={() => setReplyingTo(null)}
+        onPosted={bumpComments}
+        mayComment={mayComment}
+        commentGate={commentGate}
       />
     </main>
   );

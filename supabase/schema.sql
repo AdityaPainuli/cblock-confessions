@@ -16,6 +16,7 @@ create table if not exists public.confessions (
   status      text not null default 'approved'
               check (status in ('pending', 'approved', 'rejected')),
   hearts      integer not null default 0,
+  comments    integer not null default 0,
   -- Reader reports. At REPORT_THRESHOLD the row hides itself pending review.
   reports     integer not null default 0,
   created_at  timestamptz not null default now()
@@ -73,6 +74,59 @@ create index if not exists confession_meta_fingerprint_idx
   on public.confession_meta (fingerprint);
 
 -- ---------------------------------------------------------------------------
+-- Replies. Public like the confessions themselves, but only people on the
+-- block network may write one; see COMMENT_IP_RANGES.
+-- ---------------------------------------------------------------------------
+create table if not exists public.comments (
+  id            uuid primary key default gen_random_uuid(),
+  confession_id uuid not null references public.confessions(id) on delete cascade,
+  body          text not null check (char_length(body) between 2 and 400),
+  status        text not null default 'approved'
+                check (status in ('pending', 'approved', 'rejected')),
+  reports       integer not null default 0,
+  created_at    timestamptz not null default now()
+);
+
+create index if not exists comments_thread_idx
+  on public.comments (confession_id, status, created_at);
+
+-- Where each reply came from. Admin-only, exactly like confession_meta.
+create table if not exists public.comment_meta (
+  comment_id  uuid primary key references public.comments(id) on delete cascade,
+  ip          text,
+  device_key  text,
+  user_agent  text,
+  geo_city    text,
+  geo_region  text,
+  geo_country text,
+  created_at  timestamptz not null default now()
+);
+
+-- Keeps confessions.comments in step so the card can show a count without
+-- counting rows on every read.
+create or replace function public.sync_comment_count()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  update public.confessions c
+     set comments = (
+       select count(*) from public.comments
+        where confession_id = c.id and status = 'approved'
+     )
+   where c.id = coalesce(new.confession_id, old.confession_id);
+  return null;
+end;
+$$;
+
+drop trigger if exists comments_count_trigger on public.comments;
+create trigger comments_count_trigger
+  after insert or update or delete on public.comments
+  for each row execute function public.sync_comment_count();
+
+-- ---------------------------------------------------------------------------
 -- One heart and one report per device per confession. The device key is the
 -- fingerprint hash the client derives; it identifies a browser profile, not a
 -- person, and is only ever used to stop a single reader voting repeatedly.
@@ -110,10 +164,18 @@ alter table public.confessions     enable row level security;
 alter table public.confession_meta enable row level security;
 alter table public.confession_votes enable row level security;
 alter table public.announcements    enable row level security;
+alter table public.comments         enable row level security;
+alter table public.comment_meta     enable row level security;
 
 drop policy if exists "approved confessions are public" on public.confessions;
 create policy "approved confessions are public"
   on public.confessions for select
+  to anon, authenticated
+  using (status = 'approved');
+
+drop policy if exists "approved comments are public" on public.comments;
+create policy "approved comments are public"
+  on public.comments for select
   to anon, authenticated
   using (status = 'approved');
 
@@ -123,8 +185,8 @@ create policy "active announcements are public"
   to anon, authenticated
   using (active);
 
--- confession_meta and confession_votes intentionally have zero policies.
--- Only the service-role key (server side) can read or write them.
+-- confession_meta, comment_meta and confession_votes intentionally have zero
+-- policies. Only the service-role key (server side) can read or write them.
 
 -- ---------------------------------------------------------------------------
 -- Heart counter. Called from the server with the service-role key.
