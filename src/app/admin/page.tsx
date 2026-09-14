@@ -2,7 +2,13 @@ import { headers } from "next/headers";
 import { adminConfigured, isAdmin } from "@/lib/auth";
 import { canComment, commentGateEnabled } from "@/lib/network";
 import { clientIp } from "@/lib/device";
-import { getAnnouncement, hasSupabase, listAdmin, listAdminComments } from "@/lib/data";
+import {
+  getAnnouncement,
+  hasSupabase,
+  listAdmin,
+  listAdminComments,
+  serverNow,
+} from "@/lib/data";
 import LoginForm from "./LoginForm";
 import AdminTable, { type AdminRow } from "./AdminTable";
 
@@ -44,6 +50,7 @@ export default async function AdminPage() {
   }
 
   const ip = clientIp(await headers());
+  const now = await serverNow();
 
   return (
     <AdminTable
@@ -51,6 +58,7 @@ export default async function AdminPage() {
       demo={!hasSupabase()}
       announcement={announcement}
       comments={comments}
+      now={now}
       network={{ ip, gated: commentGateEnabled(), allowed: canComment(ip) }}
     />
   );

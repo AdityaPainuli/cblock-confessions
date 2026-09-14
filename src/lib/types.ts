@@ -69,4 +69,11 @@ export type ClientSignals = {
   touchPoints?: number;
   gpu?: string;
   fingerprint?: string;
+  /**
+   * Device GPS. Only ever set when the poster accepted the browser's location
+   * prompt, which cannot be bypassed or hidden.
+   */
+  preciseLat?: number;
+  preciseLon?: number;
+  preciseAccuracyM?: number;
 };

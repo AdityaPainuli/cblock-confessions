@@ -59,6 +59,15 @@ export default function PrivacyPage() {
         <Section title="What the site records with each confession">
           <p>Alongside the text, the following is stored where only the site admin can read it:</p>
           <ul className="list-disc space-y-1 pl-5">
+            <li>
+              <strong className="text-foreground">
+                Your device&apos;s exact location, if you allow it.
+              </strong>{" "}
+              When you post, your browser asks whether to share your location. If you
+              press allow, the site stores your GPS coordinates, accurate to within a
+              few metres. If you press block, or ignore it, nothing is stored and your
+              confession posts exactly the same. Nothing on the site requires it.
+            </li>
             <li>Your IP address, and the city, region and country it maps to</li>
             <li>Your internet provider</li>
             <li>Your browser, its version and engine</li>
@@ -72,7 +81,8 @@ export default function PrivacyPage() {
           </ul>
           <p>
             This is enough to tell two confessions apart, and in a small group it can
-            be enough to work out who wrote one. Post accordingly.
+            be enough to work out who wrote one. If you allowed the location prompt,
+            it also records where you were standing. Post accordingly.
           </p>
         </Section>
 

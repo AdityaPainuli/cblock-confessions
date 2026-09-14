@@ -3,6 +3,8 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import AnnouncementPanel from "./AnnouncementPanel";
+import OriginPanel from "./OriginPanel";
+import StatCard from "./StatCard";
 import type { Announcement } from "@/lib/announcement";
 import type { AdminComment } from "@/lib/data";
 
@@ -12,27 +14,28 @@ export type AdminRow = {
   tag: string;
   mood: string;
   to_block?: string;
-  reports?: number;
   status: string;
   hearts: number;
+  reports?: number;
+  comments?: number;
   created_at: string;
   meta?: Record<string, string | number | null> | null;
 };
 
 const STATUS_STYLE: Record<string, string> = {
   approved: "bg-[#3f7d5e]/15 text-[#2f6047]",
-  pending: "bg-gold/20 text-[#8a6f14]",
+  pending: "bg-gold/25 text-[#7a6212]",
   rejected: "bg-maroon/12 text-maroon",
 };
 
-function Field({ label, value }: { label: string; value: unknown }) {
-  if (value === null || value === undefined || value === "") return null;
-  return (
-    <div className="min-w-0">
-      <dt className="text-[10px] uppercase tracking-wider text-muted">{label}</dt>
-      <dd className="truncate font-mono text-xs text-foreground">{String(value)}</dd>
-    </div>
-  );
+/** `now` comes from the server render, so this stays pure and hydrates cleanly. */
+function since(iso: string, now: number) {
+  const mins = Math.round((now - new Date(iso).getTime()) / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.round(hrs / 24)}d ago`;
 }
 
 export default function AdminTable({
@@ -41,25 +44,43 @@ export default function AdminTable({
   announcement,
   comments,
   network,
+  now,
 }: {
   rows: AdminRow[];
   demo?: boolean;
   announcement: Announcement | null;
   comments: AdminComment[];
   network: { ip?: string; gated: boolean; allowed: boolean };
+  /** Server render time, so relative dates do not drift on hydration. */
+  now: number;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState<string | null>(null);
   const [filter, setFilter] = useState("all");
+  const [tab, setTab] = useState<"confessions" | "replies">("confessions");
   const [q, setQ] = useState("");
+
+  const stats = useMemo(() => {
+    const dayAgo = now - 86_400_000;
+    return {
+      total: rows.length,
+      today: rows.filter((r) => new Date(r.created_at).getTime() > dayAgo).length,
+      pending: rows.filter((r) => r.status === "pending").length,
+      reported: rows.filter((r) => (r.reports ?? 0) > 0).length,
+      located: rows.filter((r) => r.meta?.precise_lat != null).length,
+      replies: comments.length,
+    };
+  }, [rows, comments, now]);
 
   const visible = useMemo(
     () =>
       rows.filter((r) => {
-        if (filter !== "all" && r.status !== filter) return false;
+        if (filter === "flagged" ? !(r.reports ?? 0) : filter !== "all" && r.status !== filter)
+          return false;
         if (!q) return true;
-        const hay = `${r.body} ${r.tag} ${JSON.stringify(r.meta ?? {})}`.toLowerCase();
-        return hay.includes(q.toLowerCase());
+        return `${r.body} ${r.tag} ${JSON.stringify(r.meta ?? {})}`
+          .toLowerCase()
+          .includes(q.toLowerCase());
       }),
     [rows, filter, q],
   );
@@ -73,13 +94,13 @@ export default function AdminTable({
     router.refresh();
   }
 
-  async function removeReply(id: string) {
-    await fetch(`/api/admin/comments/${id}`, { method: "DELETE" });
+  async function remove(id: string) {
+    await fetch(`/api/admin/confessions/${id}`, { method: "DELETE" });
     router.refresh();
   }
 
-  async function remove(id: string) {
-    await fetch(`/api/admin/confessions/${id}`, { method: "DELETE" });
+  async function removeReply(id: string) {
+    await fetch(`/api/admin/comments/${id}`, { method: "DELETE" });
     router.refresh();
   }
 
@@ -89,231 +110,253 @@ export default function AdminTable({
   }
 
   return (
-    <main className="min-h-[100dvh] bg-background px-4 py-8 text-foreground sm:px-8">
-      <header className="mb-6 flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold">C Block admin</h1>
-          <p className="text-sm text-muted">{rows.length} submissions logged</p>
-        </div>
-        <button
-          onClick={logout}
-          className="rounded-full border border-line px-4 py-2 text-sm text-muted hover:text-foreground"
-        >
-          Log out
-        </button>
-      </header>
+    <main className="min-h-[100dvh] bg-background pb-16 text-foreground">
+      <div className="mx-auto w-full max-w-5xl px-4 pt-8 sm:px-6">
+        <header className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-[11px] uppercase tracking-[0.3em] text-muted">
+              Galgotias University
+            </p>
+            <h1 className="mt-1 text-2xl font-semibold">Confessions admin</h1>
+          </div>
+          <button
+            onClick={logout}
+            className="min-h-10 rounded-full border border-line px-4 text-sm text-muted transition hover:text-foreground"
+          >
+            Log out
+          </button>
+        </header>
 
-      <AnnouncementPanel current={announcement} />
-
-      <section className="mb-5 rounded-2xl border border-line bg-surface p-4">
-        <h2 className="text-sm font-semibold text-foreground">Reply network gate</h2>
-        {network.gated ? (
-          <p className="mt-1 text-sm text-muted">
-            On. Only the ranges in <code>COMMENT_IP_RANGES</code> can reply to a
-            confession; reading and confessing are open to everyone. This request
-            came from{" "}
-            <code className="rounded bg-[#fdf7ec] px-1.5 py-0.5 font-mono text-xs text-foreground">
-              {network.ip ?? "unknown"}
-            </code>
-            , which is{" "}
-            <span className={network.allowed ? "text-[#2f6047]" : "text-maroon"}>
-              {network.allowed ? "inside" : "outside"}
-            </span>{" "}
-            the allowlist.
-          </p>
-        ) : (
-          <p className="mt-1 text-sm text-muted">
-            Off, so anyone can reply. To limit replies to the block, open this page
-            on that wifi, note the address below, and set{" "}
-            <code>COMMENT_IP_RANGES</code> to the range it belongs to.
-            <code className="mt-2 block rounded-lg bg-[#fdf7ec] px-3 py-2 font-mono text-xs text-foreground">
-              {network.ip ?? "unknown"}
-            </code>
+        {demo && (
+          <p className="mt-5 rounded-xl border border-gold/40 bg-gold/12 px-4 py-3 text-sm text-[#7a6212]">
+            Demo mode: no database connected, so this data lives in memory and
+            disappears on restart.
           </p>
         )}
-      </section>
 
-      {demo && (
-        <p className="mb-5 rounded-xl border border-gold/40 bg-gold/12 px-4 py-3 text-sm text-[#7a6212]">
-          Demo mode: no Supabase credentials found, so this data lives in memory
-          and disappears on restart. Fill in <code>.env.local</code> to persist.
-        </p>
-      )}
+        <section className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          <StatCard label="Confessions" value={stats.total} />
+          <StatCard label="Last 24h" value={stats.today} />
+          <StatCard label="Replies" value={stats.replies} />
+          <StatCard
+            label="Pending"
+            value={stats.pending}
+            tone={stats.pending ? "warn" : "plain"}
+            hint={stats.pending ? "needs review" : undefined}
+          />
+          <StatCard
+            label="Reported"
+            value={stats.reported}
+            tone={stats.reported ? "alert" : "plain"}
+          />
+          <StatCard
+            label="Exact GPS"
+            value={stats.located}
+            hint={`of ${stats.total}`}
+          />
+        </section>
 
-      <div className="mb-5 flex flex-wrap gap-2">
-        {["all", "approved", "pending", "rejected"].map((s) => (
-          <button
-            key={s}
-            onClick={() => setFilter(s)}
-            className={`rounded-full px-3.5 py-1.5 text-sm ${
-              filter === s ? "bg-maroon text-[#fff4e6]" : "border border-line bg-surface text-muted"
-            }`}
-          >
-            {s}
-          </button>
-        ))}
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Search text, IP, city, device..."
-          className="ml-auto w-full rounded-full border border-line bg-surface px-4 py-1.5 text-sm focus:outline-none sm:w-72"
-        />
-      </div>
+        <div className="mt-6 grid gap-4 lg:grid-cols-2">
+          <AnnouncementPanel current={announcement} />
 
-      <div className="space-y-3">
-        {visible.map((r) => {
-          const m = r.meta ?? {};
-          const isOpen = open === r.id;
-          return (
-            <article key={r.id} className="rounded-2xl border border-line bg-surface p-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  <p className="text-[15px] leading-relaxed text-foreground">{r.body}</p>
-                  <p className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted">
-                    <span className={`rounded px-2 py-0.5 ${STATUS_STYLE[r.status] ?? ""}`}>
-                      {r.status}
-                    </span>
-                    <span className="rounded bg-maroon/10 px-2 py-0.5 text-maroon">
-                      to {r.to_block ?? "C"}
-                    </span>
-                    <span>#{r.tag}</span>
-                    <span>{r.mood}</span>
-                    <span>{"♥"} {r.hearts}</span>
-                    {!!r.reports && (
-                      <span className="rounded bg-maroon/12 px-2 py-0.5 font-medium text-maroon">
-                        {"⚑"} {r.reports} reported
+          <section className="mb-5 rounded-2xl border border-line bg-surface p-4">
+            <h2 className="text-sm font-semibold">Reply network gate</h2>
+            {network.gated ? (
+              <p className="mt-1 text-sm leading-relaxed text-muted">
+                On. Only <code>COMMENT_IP_RANGES</code> can reply; reading and
+                confessing are open to all. You are at{" "}
+                <code className="rounded bg-[#fdf7ec] px-1.5 py-0.5 font-mono text-xs text-foreground">
+                  {network.ip ?? "unknown"}
+                </code>
+                ,{" "}
+                <span className={network.allowed ? "text-[#2f6047]" : "text-maroon"}>
+                  {network.allowed ? "inside" : "outside"}
+                </span>{" "}
+                the allowlist.
+              </p>
+            ) : (
+              <p className="mt-1 text-sm leading-relaxed text-muted">
+                Off &mdash; anyone can reply. To limit replies to the block, open this
+                page on that wifi and set <code>COMMENT_IP_RANGES</code> to the range
+                this address belongs to:
+                <code className="mt-2 block rounded-lg bg-[#fdf7ec] px-3 py-2 font-mono text-xs text-foreground">
+                  {network.ip ?? "unknown"}
+                </code>
+              </p>
+            )}
+          </section>
+        </div>
+
+        <nav className="mt-2 flex gap-2 border-b border-line">
+          {(["confessions", "replies"] as const).map((t) => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={`-mb-px min-h-11 border-b-2 px-4 text-sm capitalize transition ${
+                tab === t
+                  ? "border-maroon font-medium text-maroon"
+                  : "border-transparent text-muted hover:text-foreground"
+              }`}
+            >
+              {t}
+              <span className="ml-1.5 text-xs text-muted">
+                {t === "confessions" ? rows.length : comments.length}
+              </span>
+            </button>
+          ))}
+        </nav>
+
+        {tab === "confessions" ? (
+          <>
+            <div className="mt-5 flex flex-wrap items-center gap-2">
+              {["all", "approved", "pending", "rejected", "flagged"].map((s) => (
+                <button
+                  key={s}
+                  onClick={() => setFilter(s)}
+                  className={`min-h-9 rounded-full px-3.5 text-sm capitalize transition ${
+                    filter === s
+                      ? "bg-maroon text-[#fff4e6]"
+                      : "border border-line bg-surface text-muted hover:text-foreground"
+                  }`}
+                >
+                  {s}
+                </button>
+              ))}
+              <input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Search text, IP, city, device..."
+                className="ml-auto min-h-9 w-full rounded-full border border-line bg-surface px-4 text-sm focus:border-maroon/50 focus:outline-none sm:w-72"
+              />
+            </div>
+
+            <div className="mt-4 space-y-3">
+              {visible.map((r) => {
+                const isOpen = open === r.id;
+                const exact = r.meta?.precise_lat != null;
+                return (
+                  <article
+                    key={r.id}
+                    className={`rounded-2xl border bg-surface p-4 transition ${
+                      (r.reports ?? 0) > 0 ? "border-maroon/35" : "border-line"
+                    }`}
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[15px] leading-relaxed">{r.body}</p>
+                        <p className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted">
+                          <span
+                            className={`rounded px-2 py-0.5 font-medium ${
+                              STATUS_STYLE[r.status] ?? ""
+                            }`}
+                          >
+                            {r.status}
+                          </span>
+                          <span className="rounded bg-maroon/10 px-2 py-0.5 text-maroon">
+                            to {r.to_block ?? "C"}
+                          </span>
+                          <span>#{r.tag}</span>
+                          <span>{r.mood}</span>
+                          <span>{"♥"} {r.hearts}</span>
+                          {!!r.comments && <span>{r.comments} replies</span>}
+                          {!!r.reports && (
+                            <span className="rounded bg-maroon/12 px-2 py-0.5 font-medium text-maroon">
+                              {"⚑"} {r.reports}
+                            </span>
+                          )}
+                          {exact && (
+                            <span className="rounded bg-[#3f7d5e]/15 px-2 py-0.5 font-medium text-[#2f6047]">
+                              {"📍"} exact
+                            </span>
+                          )}
+                          <span title={new Date(r.created_at).toLocaleString()}>
+                            {since(r.created_at, now)}
+                          </span>
+                        </p>
+                      </div>
+
+                      <div className="flex shrink-0 flex-wrap gap-1.5 text-xs">
+                        {r.status !== "approved" && (
+                          <button
+                            onClick={() => setStatus(r.id, "approved")}
+                            className="min-h-9 rounded-lg bg-[#3f7d5e]/15 px-3 text-[#2f6047] transition hover:bg-[#3f7d5e]/25"
+                          >
+                            Approve
+                          </button>
+                        )}
+                        {r.status !== "rejected" && (
+                          <button
+                            onClick={() => setStatus(r.id, "rejected")}
+                            className="min-h-9 rounded-lg bg-gold/20 px-3 text-[#7a6212] transition hover:bg-gold/30"
+                          >
+                            Hide
+                          </button>
+                        )}
+                        <button
+                          onClick={() => remove(r.id)}
+                          className="min-h-9 rounded-lg bg-maroon/12 px-3 text-maroon transition hover:bg-maroon/20"
+                        >
+                          Delete
+                        </button>
+                        <button
+                          onClick={() => setOpen(isOpen ? null : r.id)}
+                          className="min-h-9 rounded-lg border border-line px-3 text-muted transition hover:text-foreground"
+                        >
+                          {isOpen ? "Hide origin" : "Origin"}
+                        </button>
+                      </div>
+                    </div>
+
+                    {isOpen && <OriginPanel meta={r.meta ?? {}} />}
+                  </article>
+                );
+              })}
+
+              {!visible.length && (
+                <p className="rounded-2xl border border-dashed border-line py-10 text-center text-muted">
+                  Nothing matches that filter.
+                </p>
+              )}
+            </div>
+          </>
+        ) : (
+          <div className="mt-5 space-y-2">
+            {comments.map((c) => {
+              const m = (c.meta ?? {}) as Record<string, string | number | null>;
+              return (
+                <article
+                  key={c.id}
+                  className="flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-line bg-surface p-4"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm leading-relaxed">{c.body}</p>
+                    <p className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-muted">
+                      <span title={new Date(c.created_at).toLocaleString()}>
+                        {since(c.created_at, now)}
                       </span>
-                    )}
-                    <span>{new Date(r.created_at).toLocaleString()}</span>
-                  </p>
-                </div>
-
-                <div className="flex shrink-0 gap-2 text-xs">
-                  {r.status !== "approved" && (
-                    <button
-                      onClick={() => setStatus(r.id, "approved")}
-                      className="rounded-lg bg-[#3f7d5e]/15 px-3 py-1.5 text-[#2f6047] hover:bg-[#3f7d5e]/25"
-                    >
-                      Approve
-                    </button>
-                  )}
-                  {r.status !== "rejected" && (
-                    <button
-                      onClick={() => setStatus(r.id, "rejected")}
-                      className="rounded-lg bg-gold/20 px-3 py-1.5 text-[#8a6f14] hover:bg-gold/30"
-                    >
-                      Hide
-                    </button>
-                  )}
+                      {!!m.ip && <span className="font-mono">{String(m.ip)}</span>}
+                      {!!m.geo_city && <span>{String(m.geo_city)}</span>}
+                      {!!m.browser && <span>{String(m.browser)}</span>}
+                    </p>
+                  </div>
                   <button
-                    onClick={() => remove(r.id)}
-                    className="rounded-lg bg-maroon/12 px-3 py-1.5 text-maroon hover:bg-maroon/20"
+                    onClick={() => removeReply(c.id)}
+                    className="min-h-9 shrink-0 rounded-lg bg-maroon/12 px-3 text-xs text-maroon transition hover:bg-maroon/20"
                   >
                     Delete
                   </button>
-                  <button
-                    onClick={() => setOpen(isOpen ? null : r.id)}
-                    className="rounded-lg border border-line px-3 py-1.5 text-muted hover:text-foreground"
-                  >
-                    {isOpen ? "Hide origin" : "Origin"}
-                  </button>
-                </div>
-              </div>
+                </article>
+              );
+            })}
 
-              {isOpen && !Object.keys(m).length && (
-                <p className="mt-4 border-t border-line pt-4 text-sm text-muted">
-                  No origin data for this row. Seeded samples carry none.
-                </p>
-              )}
-
-              {isOpen && Object.keys(m).length > 0 && (
-                <dl className="mt-4 grid grid-cols-2 gap-3 border-t border-line pt-4 sm:grid-cols-4">
-                  <Field label="From block" value={m.from_block} />
-                  <Field label="Course" value={m.from_course} />
-                  <Field label="IP" value={m.ip} />
-                  <Field label="City" value={m.geo_city} />
-                  <Field label="Region" value={m.geo_region} />
-                  <Field label="Country" value={m.geo_country} />
-                  <Field label="Postal" value={m.geo_postal} />
-                  <Field label="ISP" value={m.geo_isp} />
-                  <Field label="Geo source" value={m.geo_source} />
-                  {m.geo_lat != null && m.geo_lon != null && (
-                    <div>
-                      <dt className="text-[10px] uppercase tracking-wider text-muted">Map</dt>
-                      <dd>
-                        <a
-                          className="font-mono text-xs text-[#2f6b7d] underline"
-                          href={`https://www.google.com/maps?q=${m.geo_lat},${m.geo_lon}`}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          {m.geo_lat}, {m.geo_lon}
-                        </a>
-                      </dd>
-                    </div>
-                  )}
-                  <Field label="Device" value={[m.device_vendor, m.device_model, m.device_type].filter(Boolean).join(" ")} />
-                  <Field label="OS" value={[m.os, m.os_version].filter(Boolean).join(" ")} />
-                  <Field label="Browser" value={[m.browser, m.browser_version].filter(Boolean).join(" ")} />
-                  <Field label="Engine" value={m.engine} />
-                  <Field label="Screen" value={m.screen} />
-                  <Field label="Viewport" value={m.viewport} />
-                  <Field label="DPR" value={m.pixel_ratio} />
-                  <Field label="Timezone" value={m.timezone} />
-                  <Field label="Languages" value={m.languages} />
-                  <Field label="Platform" value={m.platform} />
-                  <Field label="RAM (GB)" value={m.device_memory} />
-                  <Field label="CPU cores" value={m.cpu_cores} />
-                  <Field label="Touch points" value={m.touch_points} />
-                  <Field label="GPU" value={m.gpu} />
-                  <Field label="Fingerprint" value={m.fingerprint} />
-                  <Field label="Referrer" value={m.referrer} />
-                  <div className="col-span-2 sm:col-span-4">
-                    <Field label="User agent" value={m.user_agent} />
-                  </div>
-                </dl>
-              )}
-            </article>
-          );
-        })}
-        {!visible.length && <p className="text-muted">Nothing matches that filter.</p>}
+            {!comments.length && (
+              <p className="rounded-2xl border border-dashed border-line py-10 text-center text-muted">
+                No replies yet.
+              </p>
+            )}
+          </div>
+        )}
       </div>
-
-      <section className="mt-8">
-        <h2 className="text-sm font-semibold text-foreground">
-          Replies <span className="font-normal text-muted">({comments.length})</span>
-        </h2>
-
-        <div className="mt-3 space-y-2">
-          {comments.map((c) => {
-            const m = c.meta ?? {};
-            return (
-              <article
-                key={c.id}
-                className="flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-line bg-surface p-4"
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm leading-relaxed text-foreground">{c.body}</p>
-                  <p className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-muted">
-                    <span>{new Date(c.created_at).toLocaleString()}</span>
-                    {!!m.ip && <span className="font-mono">{String(m.ip)}</span>}
-                    {!!m.geo_city && <span>{String(m.geo_city)}</span>}
-                  </p>
-                </div>
-                <button
-                  onClick={() => removeReply(c.id)}
-                  className="shrink-0 rounded-lg bg-maroon/12 px-3 py-1.5 text-xs text-maroon transition hover:bg-maroon/20"
-                >
-                  Delete
-                </button>
-              </article>
-            );
-          })}
-          {!comments.length && (
-            <p className="text-sm text-muted">No replies yet.</p>
-          )}
-        </div>
-      </section>
     </main>
   );
 }

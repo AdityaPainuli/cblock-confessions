@@ -66,6 +66,12 @@ create table if not exists public.confession_meta (
   geo_lon         double precision,
   geo_isp         text,
   geo_source      text,
+  -- Device GPS, only ever present when the poster accepted the browser prompt.
+  -- Far more precise than the IP guess above: metres rather than a city.
+  precise_lat     double precision,
+  precise_lon     double precision,
+  precise_accuracy_m double precision,
+  precise_at      timestamptz,
   referrer        text,
   created_at      timestamptz not null default now()
 );

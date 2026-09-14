@@ -200,7 +200,14 @@ else is on the wifi. Quotas live in `QUOTAS` in `src/lib/ratelimit.ts`:
 `confession_meta` holds the submission origin: the author's block and course,
 IP, user agent, parsed device/OS/browser, screen and viewport, timezone,
 language, CPU/RAM, GPU string, a derived device fingerprint, and IP-derived
-city/region/country/coordinates. That table has **zero** RLS policies, so the
+city/region/country/coordinates.
+
+It also holds **device GPS**, but only when the poster accepted the browser's
+location prompt. That prompt is shown by the browser itself and cannot be
+suppressed or bypassed — a refusal, or ignoring it, posts the confession
+unchanged with no coordinates stored. Expect most people to refuse. The admin
+panel marks which rows have it and links straight to a map; the rest fall back
+to the IP estimate, which is city-level at best. That table has **zero** RLS policies, so the
 public anon key cannot read it; only the server-side service-role key can.
 
 This is personal data under India's DPDP Act 2023. The notice lives at

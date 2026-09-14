@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { collectSignals } from "@/lib/signals";
+import { collectSignals, requestPreciseLocation } from "@/lib/signals";
 import { BLOCKS, coursesFor, type BlockId } from "@/lib/blocks";
 import { readIdentity, writeIdentity } from "@/lib/identity";
 import { MOODS, TAGS, type Mood } from "@/lib/types";
@@ -63,6 +63,10 @@ function Sheet({
     setSending(true);
     setError(null);
     try {
+      // The browser shows its own prompt here; a refusal just means we post
+      // without it rather than holding the confession up.
+      const precise = await requestPreciseLocation();
+
       const res = await fetch("/api/confessions", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -73,7 +77,12 @@ function Sheet({
           fromBlock,
           fromCourse: fromCourse ?? undefined,
           toBlock,
-          signals: collectSignals(),
+          signals: {
+            ...collectSignals(),
+            preciseLat: precise?.lat,
+            preciseLon: precise?.lon,
+            preciseAccuracyM: precise?.accuracy,
+          },
         }),
       });
       const data = await res.json();

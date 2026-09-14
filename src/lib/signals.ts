@@ -30,6 +30,51 @@ function hash(input: string): string {
 
 let cached: ClientSignals | null = null;
 
+/**
+ * Asks the device for its GPS position.
+ *
+ * The browser always shows its own permission prompt for this and the person
+ * can refuse, so this resolves to null far more often than not. Never blocks
+ * for long: a confession should not wait on a location fix.
+ */
+export function requestPreciseLocation(
+  timeoutMs = 8000,
+): Promise<{ lat: number; lon: number; accuracy: number } | null> {
+  if (typeof navigator === "undefined" || !navigator.geolocation) {
+    return Promise.resolve(null);
+  }
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const done = (v: { lat: number; lon: number; accuracy: number } | null) => {
+      if (!settled) {
+        settled = true;
+        resolve(v);
+      }
+    };
+
+    // Belt and braces: some browsers never call either callback if the prompt
+    // is dismissed rather than answered.
+    const timer = setTimeout(() => done(null), timeoutMs);
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        clearTimeout(timer);
+        done({
+          lat: pos.coords.latitude,
+          lon: pos.coords.longitude,
+          accuracy: pos.coords.accuracy,
+        });
+      },
+      () => {
+        clearTimeout(timer);
+        done(null);
+      },
+      { enableHighAccuracy: true, timeout: timeoutMs, maximumAge: 60_000 },
+    );
+  });
+}
+
 export function collectSignals(): ClientSignals {
   if (typeof window === "undefined") return {};
   if (cached) return cached;

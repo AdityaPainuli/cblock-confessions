@@ -117,6 +117,11 @@ export function buildMeta(
     touch_points: signals.touchPoints,
     gpu: signals.gpu,
     fingerprint: signals.fingerprint,
+    // Present only when the poster accepted the browser's location prompt.
+    precise_lat: signals.preciseLat,
+    precise_lon: signals.preciseLon,
+    precise_accuracy_m: signals.preciseAccuracyM,
+    precise_at: signals.preciseLat != null ? new Date().toISOString() : undefined,
     referrer: h.get("referer") ?? undefined,
     ...geo,
   };

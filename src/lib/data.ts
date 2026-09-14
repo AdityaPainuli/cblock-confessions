@@ -18,6 +18,15 @@ export type AdminComment = Comment & {
   meta?: Record<string, unknown> | null;
 };
 
+/**
+ * Request time, read outside the render path so components stay pure. A server
+ * component renders once per request, but the clock is still an impure source
+ * and is better fetched like any other piece of data.
+ */
+export async function serverNow(): Promise<number> {
+  return Date.now();
+}
+
 export type Sort = "latest" | "top";
 export type Page = { items: Confession[]; nextCursor: string | null };
 

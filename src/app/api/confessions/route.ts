@@ -19,7 +19,15 @@ const Body = z.object({
   fromCourse: z.enum(ALL_COURSES as [string, ...string[]]).optional(),
   /** The wall being posted to. Checked against the open list below. */
   toBlock: z.enum(BLOCK_IDS),
-  signals: z.record(z.string(), z.unknown()).default({}),
+  signals: z
+    .object({
+      // Bounded so a crafted request cannot write nonsense coordinates.
+      preciseLat: z.number().min(-90).max(90).optional(),
+      preciseLon: z.number().min(-180).max(180).optional(),
+      preciseAccuracyM: z.number().min(0).max(100_000).optional(),
+    })
+    .catchall(z.unknown())
+    .default({}),
 });
 
 export async function GET(req: Request) {
