@@ -16,6 +16,21 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
+/** Set NEXT_PUBLIC_CONTACT to whatever students should write to. */
+const CONTACT = process.env.NEXT_PUBLIC_CONTACT?.trim();
+
+function Contact() {
+  if (!CONTACT) return <>whoever runs the site</>;
+  if (CONTACT.includes("@") && !CONTACT.includes(" ")) {
+    return (
+      <a href={`mailto:${CONTACT}`} className="underline underline-offset-2">
+        {CONTACT}
+      </a>
+    );
+  }
+  return <>{CONTACT}</>;
+}
+
 export default function PrivacyPage() {
   return (
     <main className="min-h-[100dvh] bg-background px-5 py-10 text-foreground">
@@ -97,8 +112,8 @@ export default function PrivacyPage() {
           <p>
             Anything on the wall can be reported with the flag under a confession.
             Enough reports and it comes down on its own pending review. If a
-            confession is about you, or you want your own removed, contact the person
-            running the site and quote the first few words of it.
+            confession is about you, or you want your own removed, contact{" "}
+            <Contact /> and quote the first few words of it.
           </p>
         </Section>
 
@@ -113,7 +128,7 @@ export default function PrivacyPage() {
           <p>
             Under India&apos;s Digital Personal Data Protection Act 2023 you can ask
             what is held about you, ask for it to be corrected, and ask for it to be
-            erased. Send that request to whoever runs the site.
+            erased. Send that request to <Contact />.
           </p>
         </Section>
 
